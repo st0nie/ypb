@@ -38,6 +38,7 @@ async fn main() {
 
     let app_state = Arc::new(AppState {
         storage_path: args.storage_path.clone(),
+        size_limit: args.size_limit,
     });
     // Create a regular axum app.
     let app = Router::new()
@@ -59,7 +60,7 @@ async fn main() {
 
     tokio::spawn(util::cleaner::cleaner_task(
         args.storage_path,
-        args.expired_check_period,
+        args.clean_period,
     ));
     // Run the server with graceful shutdown
     axum::serve(listener, app)

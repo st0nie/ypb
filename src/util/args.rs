@@ -13,5 +13,9 @@ pub struct Args {
 
     /// Period to check for expired files (in seconds)
     #[clap(short, long, default_value_t = 3600)]
-    pub expired_check_period: u64,
+    pub clean_period: u64,
+
+    /// File size limit (in bytes)
+    #[clap(short, long, default_value_t = 10 * 1024 * 1024)]
+    pub size_limit: usize,
 }
