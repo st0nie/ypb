@@ -11,10 +11,9 @@ use axum::response::Response;
 use axum_extra::TypedHeader;
 use axum_extra::headers::Host;
 use indoc::formatdoc;
-use tokio::fs::File as TokioFile;
+use tokio::fs::{self, File as TokioFile};
 use tokio_util::io::ReaderStream;
 use tracing::info;
-
 
 use super::AppState;
 
@@ -27,13 +26,16 @@ pub async fn get_handler(
     let file_path = FilePath::new(dir).join(file_name);
 
     if file_path.exists() {
-        match TokioFile::open(file_path).await {
-            Ok(file) => {
-                let stream = ReaderStream::new(file);
-                let body = Body::from_stream(stream);
-                Ok(body.into_response())
+        match fs::read_to_string(&file_path).await {
+            Ok(content) => Ok(content.into_response()),
+            _ => match TokioFile::open(&file_path).await {
+                Ok(file) => {
+                    let stream = ReaderStream::new(file);
+                    let body = Body::from_stream(stream);
+                    Ok(body.into_response())
+                }
+                _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
             },
-            Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
         }
     } else {
         Err(StatusCode::NOT_FOUND)
