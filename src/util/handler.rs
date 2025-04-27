@@ -1,29 +1,38 @@
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::Write;
 use std::path::Path as FilePath;
 use std::sync::Arc;
 
-use axum::body::Bytes;
+use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::response::Response;
 use axum_extra::TypedHeader;
 use axum_extra::headers::Host;
 use indoc::formatdoc;
+use tokio::fs::File as TokioFile;
+use tokio_util::io::ReaderStream;
 use tracing::info;
+
 
 use super::AppState;
 
 pub async fn get_handler(
     Path(file_hash): Path<String>,
     State(state): State<Arc<AppState>>,
-) -> Result<String, StatusCode> {
+) -> Result<Response, StatusCode> {
     let file_name = format!("{}.txt", file_hash);
     let dir = &state.storage_path;
     let file_path = FilePath::new(dir).join(file_name);
 
     if file_path.exists() {
-        match fs::read_to_string(file_path) {
-            Ok(content) => Ok(content),
+        match TokioFile::open(file_path).await {
+            Ok(file) => {
+                let stream = ReaderStream::new(file);
+                let body = Body::from_stream(stream);
+                Ok(body.into_response())
+            },
             Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
         }
     } else {
