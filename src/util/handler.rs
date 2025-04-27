@@ -9,6 +9,7 @@ use axum::http::StatusCode;
 use axum_extra::TypedHeader;
 use axum_extra::headers::Host;
 use indoc::formatdoc;
+use tracing::info;
 
 use super::AppState;
 
@@ -55,6 +56,8 @@ pub async fn put_handler(
     if let Err(_) = file.write_all(&bytes) {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
+
+    info!("File saved: hash: {} size: {} bytes", hash, bytes.len());
 
     Ok(formatdoc! {"
         url: http://{host}/{hash}

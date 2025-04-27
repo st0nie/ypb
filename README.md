@@ -27,12 +27,13 @@ YPB (Yet Another Pastebin) is a Rust-based temporary file storage and management
 Configure the service using command-line arguments:
 
 - `--port`: The port to listen on (default: 3000).
-- `--storage-path`: Directory for file storage (default: `./files`).
+- `--file-path`: Directory for file storage (default: `./files`).
 - `--clean-period`: Period to check for expired files (in seconds, default: 3600).
+- `--limit-size`: File size limit (in bytes).
 
 Example:
 ```bash
-cargo run -- --port 8080 --storage-path /tmp/files --expired-check-period 7200
+cargo run -- --port 8080
 ```
 
 ### API Endpoints
