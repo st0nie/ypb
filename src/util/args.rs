@@ -17,5 +17,5 @@ pub struct Args {
 
     /// File size limit (in bytes)
     #[clap(short, long, default_value_t = 10 * 1024 * 1024)]
-    pub size_limit: usize,
+    pub limit_size: usize,
 }

@@ -35,7 +35,7 @@ pub async fn put_handler(
     State(state): State<Arc<AppState>>,
     bytes: Bytes,
 ) -> Result<String, StatusCode> {
-    if bytes.len() > state.size_limit {
+    if bytes.len() > state.limit_size {
         return Err(StatusCode::BAD_REQUEST);
     }
 

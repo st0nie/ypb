@@ -5,5 +5,5 @@ pub mod cleaner;
 
 pub struct AppState {
     pub storage_path: String,
-    pub size_limit: usize,
+    pub limit_size: usize,
 }

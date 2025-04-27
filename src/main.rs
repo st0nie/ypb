@@ -38,7 +38,7 @@ async fn main() {
 
     let app_state = Arc::new(AppState {
         storage_path: args.storage_path.clone(),
-        size_limit: args.size_limit,
+        limit_size: args.limit_size,
     });
     // Create a regular axum app.
     let app = Router::new()
