@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::uri::Scheme;
+use axum::http::{StatusCode, Uri};
 use axum::response::IntoResponse;
 use axum::response::Response;
 use axum_extra::TypedHeader;
@@ -43,6 +44,7 @@ pub async fn get_handler(
 }
 
 pub async fn put_handler(
+    uri: Uri,
     TypedHeader(host): TypedHeader<Host>,
     State(state): State<Arc<AppState>>,
     bytes: Bytes,
@@ -70,10 +72,13 @@ pub async fn put_handler(
 
     info!("File saved: hash: {} size: {} bytes", hash, bytes.len());
 
+    let protocal_str = uri.scheme_str().unwrap_or(Scheme::HTTP.as_str());
+
     Ok(formatdoc! {"
-        url: http://{host}/{hash}
+        url: {protocal}://{host}/{hash}
         size: {size} bytes
         ",
+        protocal = protocal_str,
         size = bytes.len(),
         hash = hash,
         host = host,
