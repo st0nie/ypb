@@ -9,7 +9,7 @@ pub struct Args {
 
     /// Path to the file storage directory
     #[clap(short, long, default_value = "./files")]
-    pub storage_path: String,
+    pub file_path: String,
 
     /// Period to check for expired files (in seconds)
     #[clap(short, long, default_value_t = 3600)]

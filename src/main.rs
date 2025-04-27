@@ -32,12 +32,12 @@ async fn main() {
 
     let args = Args::parse();
 
-    if !std::path::Path::new(&args.storage_path).exists() {
-        std::fs::create_dir_all(&args.storage_path).expect("Failed to create storage directory");
+    if !std::path::Path::new(&args.file_path).exists() {
+        std::fs::create_dir_all(&args.file_path).expect("Failed to create storage directory");
     }
 
     let app_state = Arc::new(AppState {
-        storage_path: args.storage_path.clone(),
+        storage_path: args.file_path.clone(),
         limit_size: args.limit_size,
     });
     // Create a regular axum app.
@@ -59,7 +59,7 @@ async fn main() {
         .unwrap();
 
     tokio::spawn(util::cleaner::cleaner_task(
-        args.storage_path,
+        args.file_path,
         args.clean_period,
     ));
     // Run the server with graceful shutdown
