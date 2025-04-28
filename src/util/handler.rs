@@ -7,8 +7,8 @@ use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::uri::Scheme;
 use axum::http::{HeaderMap, StatusCode};
-use axum::response::IntoResponse;
 use axum::response::Response;
+use axum::response::{IntoResponse, Redirect};
 use axum_extra::TypedHeader;
 use axum_extra::headers::Host;
 use indoc::formatdoc;
@@ -28,7 +28,15 @@ pub async fn get_handler(
 
     if file_path.exists() {
         match fs::read_to_string(&file_path).await {
-            Ok(content) => Ok(content.into_response()),
+            Ok(content) =>
+            // 302 redirect if the content is a valid URL
+            {
+                if content.starts_with("http") && !content.contains([' ', '\n']) {
+                    Ok(Redirect::temporary(&content).into_response())
+                } else {
+                    Ok(content.into_response())
+                }
+            }
             _ => match TokioFile::open(&file_path).await {
                 Ok(file) => {
                     let stream = ReaderStream::new(file);
