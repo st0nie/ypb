@@ -1,6 +1,6 @@
 # YPB
 
-YPB (Yet another PasteBin) is a Rust-based temporary file storage and management service. It supports file uploads and periodically cleans up expired files, making it ideal for short-term file sharing needs.
+YPB (Yet another PasteBin) is a Rust-based temporary Pastebin service and URL shorter. It supports file uploads and periodically cleans up expired files, making it ideal for short-term file sharing needs.
 
 ## Features
 
