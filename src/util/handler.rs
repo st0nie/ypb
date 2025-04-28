@@ -6,7 +6,7 @@ use std::sync::Arc;
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::uri::Scheme;
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
 use axum::response::{IntoResponse, Redirect};
 use axum_extra::TypedHeader;
@@ -22,7 +22,16 @@ pub async fn get_handler(
     Path(file_hash): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, StatusCode> {
-    let file_name = format!("{}.txt", file_hash);
+    let file_hash = std::path::Path::new(&file_hash);
+    let file_name = format!(
+        "{}.txt",
+        file_hash
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+    );
+    let file_ext = file_hash.extension().and_then(|s| s.to_str());
+
     let dir = &state.storage_path;
     let file_path = FilePath::new(dir).join(file_name);
 
@@ -41,7 +50,14 @@ pub async fn get_handler(
                 Ok(file) => {
                     let stream = ReaderStream::new(file);
                     let body = Body::from_stream(stream);
-                    Ok(body.into_response())
+                    let content_type = mime_guess::from_ext(file_ext.unwrap_or_default())
+                        .first_or_octet_stream()
+                        .to_string();
+
+                    Ok(
+                        (StatusCode::OK, [(header::CONTENT_TYPE, content_type)], body)
+                            .into_response(),
+                    )
                 }
                 _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
             },
