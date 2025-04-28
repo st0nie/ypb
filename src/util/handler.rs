@@ -81,7 +81,7 @@ pub async fn put_handler(
 
     use base64::prelude::*;
 
-    let hash = &BASE64_STANDARD.encode(HASHER.checksum(&bytes).to_be_bytes())[0..4];
+    let hash = &BASE64_URL_SAFE.encode(HASHER.checksum(&bytes).to_be_bytes())[0..4];
 
     let file_name = format!("{}.txt", hash);
     let file_path = FilePath::new(&state.storage_path).join(file_name);
