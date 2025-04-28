@@ -69,21 +69,17 @@ pub async fn put_handler(
 
     let file_name = format!("{}.txt", hash);
     let file_path = FilePath::new(&state.storage_path).join(file_name);
-    let mut file = match File::create(&file_path) {
-        Ok(file) => file,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
+    let mut file = File::create(&file_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if let Err(_) = file.write_all(&bytes) {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
+    file.write_all(&bytes)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     info!("File saved: hash: {} size: {} bytes", hash, bytes.len());
 
-    let protocal_str = match header_map.get("X-Forwarded-Proto") {
-        Some(proto) => proto.to_str().unwrap_or(Scheme::HTTP.as_str()),
-        _ => Scheme::HTTP.as_str(),
-    };
+    let protocal_str = header_map
+        .get("X-Forwarded-Proto")
+        .and_then(|proto| proto.to_str().ok())
+        .unwrap_or(Scheme::HTTP.as_str());
 
     Ok(formatdoc! {"
         url: {protocal}://{host}/{hash}

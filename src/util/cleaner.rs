@@ -1,14 +1,14 @@
 use anyhow::Result;
 use std::fs;
 use std::path::Path;
-use tracing::info;
+use tracing::{error, info};
 
 pub async fn cleaner_task(storage_path: String, period: u64) -> Result<()> {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(period)).await;
         info!("Cleaning up expired files in {:?}", storage_path);
         if let Err(e) = clean_up(&storage_path, period) {
-            info!("Error cleaning up files: {:?}", e);
+            error!("Error cleaning up files: {:?}", e);
         }
     }
 }
