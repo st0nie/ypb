@@ -51,13 +51,9 @@ pub async fn get_handler(
                         formatdoc! {
                             r#"
                             <head>
-                                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.css">
+                                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-light.css">
                                 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
                                 <script>hljs.highlightAll();</script>
-                                <style type="text/css">
-                                    body {{ margin:0; }}
-                                    pre {{ margin:0; }}
-                                </style>
                             </head>
                             <body>
                             <pre><code>{}</code></pre>
