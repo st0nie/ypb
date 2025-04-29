@@ -4,7 +4,7 @@ After=network.target syslog.target
 Wants=network.target
 
 [Service]
-ExecStart=/usr/local/bin/ypb /var/lib/ypb
+ExecStart=/usr/local/bin/ypb -f /var/lib/ypb
 Environment=RUST_LOG=info
 
 [Install]
