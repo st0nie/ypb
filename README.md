@@ -62,7 +62,7 @@ curl Example:
 $ curl http://localhost:3000/coBF
 ```
 
-### Delete File
+#### Delete File
 - **Method**: `DELETE`
 - **Path**: `/{file_hash}`
 - **Description**: Deletes a file by its hash.
