@@ -60,7 +60,7 @@ pub async fn get_handler(
             {
                 if content.starts_with("http") && !content.contains([' ', '\n']) {
                     Ok(Redirect::temporary(&content).into_response())
-                } else if file_ext.is_none_or(|ext| ext == "txt") {
+                } else if file_ext.as_ref().is_none_or(|ext| ext == "txt") {
                     Ok(content.into_response())
                 } else {
                     Ok((
@@ -74,10 +74,11 @@ pub async fn get_handler(
                                 <script>hljs.highlightAll();</script>
                             </head>
                             <body>
-                            <pre><code>{}</code></pre>
+                            <pre><code class="{}">{}</code></pre>
                             </body>
                             "#,
                             state.args.syntax_theme,
+                            file_ext.unwrap_or_default(),
                             content
                         }
                     ).into_response())
