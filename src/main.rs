@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::{Context, Result};
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, put};
 use axum::{Router, routing::get};
@@ -16,7 +17,7 @@ use util::handler::{delete_handler, get_handler, put_handler};
 use util::{AppState, Args};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     // Enable tracing.
     tracing_subscriber::registry()
         .with(
@@ -34,7 +35,7 @@ async fn main() {
     let args = Args::parse();
 
     if !std::path::Path::new(&args.file_path).exists() {
-        std::fs::create_dir_all(&args.file_path).expect("Failed to create storage directory");
+        std::fs::create_dir_all(&args.file_path).context("Failed to create storage directory")?;
     }
 
     let app_state = Arc::new(AppState { args: args.clone() });
@@ -56,7 +57,7 @@ async fn main() {
     // Create a `TcpListener` using tokio.
     let listener = TcpListener::bind(format!("0.0.0.0:{}", args.port))
         .await
-        .unwrap();
+        .with_context(|| format!("Failed to listen on port {}", args.port))?;
 
     tokio::spawn(util::cleaner::cleaner_task(
         args.file_path,
@@ -67,6 +68,8 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
+
+    Ok(())
 }
 
 async fn shutdown_signal() {
