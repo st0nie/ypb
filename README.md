@@ -30,6 +30,7 @@ Configure the service using command-line arguments:
 - `--file-path`: Directory for file storage (default: `./files`).
 - `--clean-period`: Period to check for expired files (in seconds, default: 3600).
 - `--limit-size`: File size limit (in bytes).
+- `--syntax-theme`: Syntax highlight theme (highlight.js)
 
 Example:
 ```bash
@@ -45,9 +46,10 @@ cargo run -- --port 8080
 
 curl Example:
 ```bash
-$ echo "1232" | curl -X PUT --data @- "localhost:3000/"
+$ echo "1232" | curl -X PUT --data-binary @- "localhost:3000/"
 url: http://localhost:3000/coBF
 size: 4 bytes
+secret: 1745900203
 ```
 
 #### Retrieve File
@@ -58,4 +60,15 @@ size: 4 bytes
 curl Example:
 ```bash
 $ curl http://localhost:3000/coBF
+```
+
+### Delete File
+- **Method**: `DELETE`
+- **Path**: `/{file_hash}`
+- **Description**: Deletes a file by its hash.
+
+curl Example
+```bash
+$ echo "1745900203" | curl -X DELETE --data @- http://localhost:3000/coBF
+File coBF deleted successfully.
 ```
