@@ -141,6 +141,7 @@ pub async fn put_handler(
 
     Ok(formatdoc! {"
         url: {protocal}://{host}/{hash}
+        short: {hash}
         size: {size} bytes
         secret: {timestamp}
         ",
