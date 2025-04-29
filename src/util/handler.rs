@@ -36,15 +36,12 @@ fn parse_filehash(file_hash: &str) -> (String, Option<String>) {
 }
 
 fn file_to_timestamp(file: &File) -> Result<String, StatusCode> {
-    Ok(file
-        .metadata()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .modified()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .as_secs()
-        .to_string())
+    file.metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs().to_string())
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 pub async fn get_handler(
@@ -163,8 +160,7 @@ pub async fn delete_handler(
     let dir = &state.args.file_path;
     let file_path = FilePath::new(dir).join(file_name);
 
-    let file = File::open(&file_path)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let file = File::open(&file_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let timestamp = file_to_timestamp(&file)?;
 
