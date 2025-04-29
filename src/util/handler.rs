@@ -110,10 +110,6 @@ pub async fn put_handler(
     State(state): State<Arc<AppState>>,
     bytes: Bytes,
 ) -> Result<String, StatusCode> {
-    if bytes.len() > state.args.limit_size {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
     const HASHER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
 
     use base64::prelude::*;

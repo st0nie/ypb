@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, put};
 use axum::{Router, routing::get};
 use clap::Parser;
@@ -11,7 +12,7 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod util;
-use util::handler::{get_handler, put_handler,delete_handler};
+use util::handler::{delete_handler, get_handler, put_handler};
 use util::{AppState, Args};
 
 #[tokio::main]
@@ -48,6 +49,7 @@ async fn main() {
             // Graceful shutdown will wait for outstanding requests to complete. Add a timeout so
             // requests don't hang forever.
             TimeoutLayer::new(Duration::from_secs(10)),
+            DefaultBodyLimit::max(args.limit_size),
         ))
         .with_state(app_state);
 
