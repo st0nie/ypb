@@ -32,7 +32,7 @@ pub async fn get_handler(
     );
     let file_ext = file_hash.extension().and_then(|s| s.to_str());
 
-    let dir = &state.storage_path;
+    let dir = &state.args.file_path;
     let file_path = FilePath::new(dir).join(file_name);
 
     if file_path.exists() {
@@ -51,7 +51,7 @@ pub async fn get_handler(
                         formatdoc! {
                             r#"
                             <head>
-                                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-light.css">
+                                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css">
                                 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
                                 <script>hljs.highlightAll();</script>
                             </head>
@@ -59,6 +59,7 @@ pub async fn get_handler(
                             <pre><code>{}</code></pre>
                             </body>
                             "#,
+                            state.args.syntax_theme,
                             content
                         }
                     ).into_response())
@@ -91,7 +92,7 @@ pub async fn put_handler(
     State(state): State<Arc<AppState>>,
     bytes: Bytes,
 ) -> Result<String, StatusCode> {
-    if bytes.len() > state.limit_size {
+    if bytes.len() > state.args.limit_size {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -102,7 +103,7 @@ pub async fn put_handler(
     let hash = &BASE64_URL_SAFE.encode(HASHER.checksum(&bytes).to_be_bytes())[0..4];
 
     let file_name = format!("{}.txt", hash);
-    let file_path = FilePath::new(&state.storage_path).join(file_name);
+    let file_path = FilePath::new(&state.args.file_path).join(file_name);
     let mut file = File::create(&file_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     file.write_all(&bytes)

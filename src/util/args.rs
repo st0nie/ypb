@@ -1,6 +1,6 @@
 use clap::Parser;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 pub struct Args {
     /// Port to listen on
@@ -18,4 +18,8 @@ pub struct Args {
     /// File size limit (in bytes)
     #[clap(short, long, default_value_t = 10 * 1024 * 1024)]
     pub limit_size: usize,
+
+    /// Syntax highlight theme (highlight.js)
+    #[clap(short, long, default_value = "vs")]
+    pub syntax_theme: String,
 }

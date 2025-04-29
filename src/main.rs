@@ -36,10 +36,7 @@ async fn main() {
         std::fs::create_dir_all(&args.file_path).expect("Failed to create storage directory");
     }
 
-    let app_state = Arc::new(AppState {
-        storage_path: args.file_path.clone(),
-        limit_size: args.limit_size,
-    });
+    let app_state = Arc::new(AppState { args: args.clone() });
     // Create a regular axum app.
     let app = Router::new()
         .route("/", get("hello, ypb!"))
