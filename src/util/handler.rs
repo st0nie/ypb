@@ -42,8 +42,30 @@ pub async fn get_handler(
             {
                 if content.starts_with("http") && !content.contains([' ', '\n']) {
                     Ok(Redirect::temporary(&content).into_response())
-                } else {
+                } else if file_ext.is_none_or(|ext| ext == "txt") {
                     Ok(content.into_response())
+                } else {
+                    Ok((
+                        StatusCode::OK,
+                        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                        formatdoc! {
+                            r#"
+                            <head>
+                                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.css">
+                                <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+                                <script>hljs.highlightAll();</script>
+                                <style type="text/css">
+                                    body {{ margin:0; }}
+                                    pre {{ margin:0; }}
+                                </style>
+                            </head>
+                            <body>
+                            <pre><code>{}</code></pre>
+                            </body>
+                            "#,
+                            content
+                        }
+                    ).into_response())
                 }
             }
             _ => match TokioFile::open(&file_path).await {
