@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::routing::put;
+use axum::routing::{delete, put};
 use axum::{Router, routing::get};
 use clap::Parser;
 use tokio::net::TcpListener;
@@ -11,7 +11,7 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod util;
-use util::handler::{get_handler, put_handler};
+use util::handler::{get_handler, put_handler,delete_handler};
 use util::{AppState, Args};
 
 #[tokio::main]
@@ -42,6 +42,7 @@ async fn main() {
         .route("/", get("hello, ypb!"))
         .route("/", put(put_handler))
         .route("/{*hash}", get(get_handler))
+        .route("/{*hash}", delete(delete_handler))
         .layer((
             TraceLayer::new_for_http(),
             // Graceful shutdown will wait for outstanding requests to complete. Add a timeout so

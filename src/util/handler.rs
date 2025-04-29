@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path as FilePath;
 use std::sync::Arc;
+use std::time::UNIX_EPOCH;
 
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
@@ -18,11 +19,8 @@ use tracing::info;
 
 use super::AppState;
 
-pub async fn get_handler(
-    Path(file_hash): Path<String>,
-    State(state): State<Arc<AppState>>,
-) -> Result<Response, StatusCode> {
-    let file_hash = std::path::Path::new(&file_hash);
+fn parse_filehash(file_hash: &str) -> (String, Option<String>) {
+    let file_hash = std::path::Path::new(file_hash);
     let file_name = format!(
         "{}.txt",
         file_hash
@@ -30,7 +28,30 @@ pub async fn get_handler(
             .and_then(|s| s.to_str())
             .unwrap_or_default()
     );
-    let file_ext = file_hash.extension().and_then(|s| s.to_str());
+    let file_ext = file_hash
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string());
+    (file_name, file_ext)
+}
+
+fn file_to_timestamp(file: &File) -> Result<String, StatusCode> {
+    Ok(file
+        .metadata()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .modified()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .as_secs()
+        .to_string())
+}
+
+pub async fn get_handler(
+    Path(file_hash): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, StatusCode> {
+    let (file_name, file_ext) = parse_filehash(file_hash.as_str());
 
     let dir = &state.args.file_path;
     let file_path = FilePath::new(dir).join(file_name);
@@ -69,7 +90,7 @@ pub async fn get_handler(
                 Ok(file) => {
                     let stream = ReaderStream::new(file);
                     let body = Body::from_stream(stream);
-                    let content_type = mime_guess::from_ext(file_ext.unwrap_or_default())
+                    let content_type = mime_guess::from_ext(&file_ext.unwrap_or_default())
                         .first_or_octet_stream()
                         .to_string();
 
@@ -116,13 +137,46 @@ pub async fn put_handler(
         .and_then(|proto| proto.to_str().ok())
         .unwrap_or(Scheme::HTTP.as_str());
 
+    let timestamp = file_to_timestamp(&file)?;
+
     Ok(formatdoc! {"
         url: {protocal}://{host}/{hash}
         size: {size} bytes
+        secret: {timestamp}
         ",
         protocal = protocal_str,
         size = bytes.len(),
         hash = hash,
         host = host,
+        timestamp = timestamp
     })
+}
+
+pub async fn delete_handler(
+    Path(file_hash): Path<String>,
+    State(state): State<Arc<AppState>>,
+    secret: String,
+) -> Result<String, StatusCode> {
+    let (file_name, _) = parse_filehash(file_hash.as_str());
+
+    let dir = &state.args.file_path;
+    let file_path = FilePath::new(dir).join(file_name);
+
+    let file = File::open(&file_path)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let timestamp = file_to_timestamp(&file)?;
+
+    if file_path.exists() {
+        if secret == timestamp {
+            fs::remove_file(file_path)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            Ok(format!("File {} deleted successfully", file_hash))
+        } else {
+            Err(StatusCode::FORBIDDEN)
+        }
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
