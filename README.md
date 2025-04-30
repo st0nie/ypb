@@ -7,6 +7,25 @@ YPB (Yet another PasteBin) is a Rust-based temporary Pastebin service and URL sh
 - **File Upload**: Upload files via HTTP interface.
 - **File Cleanup**: Periodically check and delete expired files.
 
+## Installation
+
+### Arch Linux
+
+`ypb` is available on [AUR](https://aur.archlinux.org/packages/ypb) and [archlinuxcn](https://github.com/archlinuxcn/repo/blob/master/archlinuxcn/ypb/PKGBUILD).
+
+#### AUR
+
+```bash
+yay -S ypb # For yay
+paru -S ypb # For paru
+```
+
+#### archlinuxcn
+
+```bash
+sudo pacman -S ypb
+```
+
 ## Usage
 
 ### Running the Service
