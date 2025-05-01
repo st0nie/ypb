@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::Write;
 use std::path::Path as FilePath;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
@@ -15,6 +13,7 @@ use axum_extra::headers::Host;
 use indoc::formatdoc;
 use thiserror::Error;
 use tokio::fs::{self, File as TokioFile};
+use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 use tracing::info;
 
@@ -29,7 +28,9 @@ pub enum AppError {
     #[error("Internal server error: {0}")]
     InternalServerError(String),
     #[error("IO error: {0}")]
-    IoError(#[from] tokio::io::Error),
+    IoError(#[from] std::io::Error),
+    #[error("System time error: {0}")]
+    SystemTimeError(#[from] std::time::SystemTimeError),
 }
 
 impl IntoResponse for AppError {
@@ -39,6 +40,7 @@ impl IntoResponse for AppError {
             AppError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
             AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::IoError(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("IO Error: {}", err)),
+            AppError::SystemTimeError(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("System Time Error: {}", err)),
         };
 
         (status, error_message).into_response()
@@ -61,14 +63,11 @@ fn parse_filehash(file_hash: &str) -> (String, Option<String>) {
     (file_name, file_ext)
 }
 
-fn file_to_timestamp(file: &File) -> Result<String, AppError> {
-    file.metadata()?
-        .modified()?
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| AppError::InternalServerError(format!("System time error: {}", e)))?
-        .as_secs()
-        .to_string()
-        .pipe(Ok)
+async fn file_to_timestamp(file_path: &FilePath) -> Result<String, AppError> {
+    let metadata = fs::metadata(file_path).await?;
+    let modified_time = metadata.modified()?;
+    let duration_since_epoch = modified_time.duration_since(UNIX_EPOCH)?;
+    Ok(duration_since_epoch.as_secs().to_string())
 }
 
 pub async fn get_handler(
@@ -78,18 +77,24 @@ pub async fn get_handler(
     let (file_name, file_ext) = parse_filehash(file_hash.as_str());
 
     let dir = &state.args.file_path;
-    let file_path = FilePath::new(dir).join(file_name);
+    let file_path = FilePath::new(dir).join(&file_name);
 
-    if file_path.exists() {
-        match fs::read_to_string(&file_path).await {
-            Ok(content) =>
-            // 302 redirect if the content is a valid URL
-            {
-                if content.starts_with("http") && !content.contains([' ', '\n']) {
-                    Ok(Redirect::temporary(&content).into_response())
-                } else if file_ext.as_ref().is_none_or(|ext| ext == "txt") {
-                    Ok(content.into_response())
-                } else {
+    if !file_path.exists() {
+        return Err(AppError::NotFound);
+    }
+
+    match file_ext.as_deref() {
+        None | Some("txt") => {
+            let content = fs::read_to_string(&file_path).await?;
+            if content.starts_with("http") && !content.contains([' ', '\n']) {
+                Ok(Redirect::temporary(&content).into_response())
+            } else {
+                Ok(content.into_response())
+            }
+        }
+        Some(ext) => {
+            match fs::read_to_string(&file_path).await {
+                Ok(content) => {
                     Ok((
                         StatusCode::OK,
                         [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
@@ -105,17 +110,16 @@ pub async fn get_handler(
                             </body>
                             "#,
                             state.args.syntax_theme,
-                            file_ext.unwrap_or_default(),
+                            ext,
                             content
                         }
                     ).into_response())
                 }
-            }
-            Err(_) => match TokioFile::open(&file_path).await {
-                Ok(file) => {
+                Err(_) => {
+                    let file = TokioFile::open(&file_path).await?;
                     let stream = ReaderStream::new(file);
                     let body = Body::from_stream(stream);
-                    let content_type = mime_guess::from_ext(&file_ext.unwrap_or_default())
+                    let content_type = mime_guess::from_ext(ext)
                         .first_or_octet_stream()
                         .to_string();
 
@@ -124,11 +128,8 @@ pub async fn get_handler(
                             .into_response(),
                     )
                 }
-                Err(e) => Err(AppError::IoError(e)),
-            },
+            }
         }
-    } else {
-        Err(AppError::NotFound)
     }
 }
 
@@ -142,30 +143,32 @@ pub async fn put_handler(
 
     use base64::prelude::*;
 
-    let hash = &BASE64_URL_SAFE.encode(HASHER.checksum(&bytes).to_be_bytes())[0..4];
+    let hash_bytes = HASHER.checksum(&bytes).to_be_bytes();
+    let hash = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&hash_bytes[0..3]);
 
     let file_name = format!("{}.txt", hash);
-    let file_path = FilePath::new(&state.args.file_path).join(file_name);
-    let mut file = File::create(&file_path)?;
+    let file_path = FilePath::new(&state.args.file_path).join(&file_name);
 
-    file.write_all(&bytes)?;
+    let mut file = TokioFile::create(&file_path).await?;
+    file.write_all(&bytes).await?;
+    file.sync_all().await?;
 
-    info!("File saved: hash: {} size: {} bytes", hash, bytes.len());
+    info!("File saved: path: {:?} size: {} bytes", file_path, bytes.len());
 
-    let protocal_str = header_map
+    let protocol_str = header_map
         .get("X-Forwarded-Proto")
         .and_then(|proto| proto.to_str().ok())
-        .unwrap_or(Scheme::HTTP.as_str());
+        .unwrap_or_else(|| Scheme::HTTP.as_str());
 
-    let timestamp = file_to_timestamp(&file)?;
+    let timestamp = file_to_timestamp(&file_path).await?;
 
     Ok(formatdoc! {"
-        url: {protocal}://{host}/{hash}
+        url: {protocol}://{host}/{hash}
         short: {hash}
         size: {size} bytes
         secret: {timestamp}
         ",
-        protocal = protocal_str,
+        protocol = protocol_str,
         size = bytes.len(),
         hash = hash,
         host = host,
@@ -181,30 +184,19 @@ pub async fn delete_handler(
     let (file_name, _) = parse_filehash(file_hash.as_str());
 
     let dir = &state.args.file_path;
-    let file_path = FilePath::new(dir).join(file_name);
+    let file_path = FilePath::new(dir).join(&file_name);
 
-    let file = File::open(&file_path)?;
+    if !file_path.exists() {
+        return Err(AppError::NotFound);
+    }
 
-    let timestamp = file_to_timestamp(&file)?;
+    let timestamp = file_to_timestamp(&file_path).await?;
 
-    if file_path.exists() {
-        if secret == timestamp {
-            fs::remove_file(file_path)
-                .await?;
-            Ok(format!("File {} deleted successfully", file_hash))
-        } else {
-            Err(AppError::Forbidden)
-        }
+    if secret == timestamp {
+        fs::remove_file(&file_path)
+            .await?;
+        Ok(format!("File {} deleted successfully", file_hash))
     } else {
-        Err(AppError::NotFound)
+        Err(AppError::Forbidden)
     }
 }
-
-// Helper function to pipe a value into Ok, useful for chaining
-trait Pipeable {
-    fn pipe<T>(self, f: impl FnOnce(Self) -> T) -> T where Self: Sized {
-        f(self)
-    }
-}
-
-impl<T> Pipeable for T {}
