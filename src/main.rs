@@ -19,7 +19,7 @@ use util::{AppState, Args};
 // Function to create the application router
 pub fn create_app_router(app_state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/", get(|| async {"hello, ypb!"}))
+        .route("/", get(|| async { "hello, ypb!" }))
         .route("/", put(put_handler))
         .route("/{*hash}", get(get_handler))
         .route("/{*hash}", delete(delete_handler))
