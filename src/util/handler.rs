@@ -1,7 +1,3 @@
-use std::path::Path as FilePath;
-use std::sync::Arc;
-use std::time::UNIX_EPOCH;
-
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::uri::Scheme;
@@ -10,7 +6,11 @@ use axum::response::Response;
 use axum::response::{IntoResponse, Redirect};
 use axum_extra::TypedHeader;
 use axum_extra::headers::Host;
+use futures::TryFutureExt;
 use indoc::formatdoc;
+use std::path::Path as FilePath;
+use std::sync::Arc;
+use std::time::UNIX_EPOCH;
 use thiserror::Error;
 use tokio::fs::{self, File as TokioFile};
 use tokio::io::AsyncWriteExt;
@@ -39,8 +39,8 @@ impl IntoResponse for AppError {
             AppError::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
             AppError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
             AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            AppError::IoError(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("IO Error: {}", err)),
-            AppError::SystemTimeError(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("System Time Error: {}", err)),
+            AppError::IoError(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+            AppError::SystemTimeError(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
         };
 
         (status, error_message).into_response()
@@ -64,10 +64,12 @@ fn parse_filehash(file_hash: &str) -> (String, Option<String>) {
 }
 
 async fn file_to_timestamp(file_path: &FilePath) -> Result<String, AppError> {
-    let metadata = fs::metadata(file_path).await?;
-    let modified_time = metadata.modified()?;
-    let duration_since_epoch = modified_time.duration_since(UNIX_EPOCH)?;
-    Ok(duration_since_epoch.as_secs().to_string())
+    Ok(fs::metadata(file_path)
+        .await?
+        .modified()?
+        .duration_since(UNIX_EPOCH)?
+        .as_secs()
+        .to_string())
 }
 
 pub async fn get_handler(
@@ -93,9 +95,11 @@ pub async fn get_handler(
             }
         }
         Some(ext) => {
-            match fs::read_to_string(&file_path).await {
-                Ok(content) => {
-                    Ok((
+            // Attempt to read as string and format as HTML
+            let attempt_html = async {
+                let context = fs::read_to_string(&file_path).await?;
+                Ok::<_, AppError>( // Success type is Response
+                    (
                         StatusCode::OK,
                         [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
                         formatdoc! {
@@ -106,29 +110,33 @@ pub async fn get_handler(
                                 <script>hljs.highlightAll();</script>
                             </head>
                             <body>
-                            <pre><code class="{}">{}</code></pre>
+                            <pre><code class="{ext}">{context}</code></pre>
                             </body>
                             "#,
                             state.args.syntax_theme,
-                            ext,
-                            content
                         }
-                    ).into_response())
-                }
-                Err(_) => {
-                    let file = TokioFile::open(&file_path).await?;
-                    let stream = ReaderStream::new(file);
-                    let body = Body::from_stream(stream);
-                    let content_type = mime_guess::from_ext(ext)
-                        .first_or_octet_stream()
-                        .to_string();
+                    ).into_response()
+                )
+            };
 
-                    Ok(
-                        (StatusCode::OK, [(header::CONTENT_TYPE, content_type)], body)
-                            .into_response(),
-                    )
-                }
-            }
+            // Fallback: stream the file directly if reading as string fails
+            let fallback_stream = |_| async {
+                let body = TokioFile::open(&file_path)
+                    .map_ok(ReaderStream::new)
+                    .map_ok(Body::from_stream)
+                    .await?;
+                let content_type = mime_guess::from_ext(ext)
+                    .first_or_octet_stream()
+                    .to_string();
+
+                Ok::<_, AppError>(
+                    (StatusCode::OK, [(header::CONTENT_TYPE, content_type)], body).into_response(),
+                )
+            };
+
+            attempt_html
+                .or_else(fallback_stream)
+                .await
         }
     }
 }
@@ -153,7 +161,11 @@ pub async fn put_handler(
     file.write_all(&bytes).await?;
     file.sync_all().await?;
 
-    info!("File saved: path: {:?} size: {} bytes", file_path, bytes.len());
+    info!(
+        "File saved: path: {:?} size: {} bytes",
+        file_path,
+        bytes.len()
+    );
 
     let protocol_str = header_map
         .get("X-Forwarded-Proto")
@@ -193,8 +205,7 @@ pub async fn delete_handler(
     let timestamp = file_to_timestamp(&file_path).await?;
 
     if secret == timestamp {
-        fs::remove_file(&file_path)
-            .await?;
+        fs::remove_file(&file_path).await?;
         Ok(format!("File {} deleted successfully", file_hash))
     } else {
         Err(AppError::Forbidden)
