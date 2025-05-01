@@ -17,7 +17,7 @@ use util::handler::{delete_handler, get_handler, put_handler};
 use util::{AppState, Args};
 
 // Function to create the application router
-fn create_app_router(app_state: Arc<AppState>) -> Router {
+pub fn create_app_router(app_state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(|| async {"hello, ypb!"}))
         .route("/", put(put_handler))
@@ -106,3 +106,6 @@ async fn shutdown_signal() {
         _ = terminate => {},
     }
 }
+
+#[cfg(test)]
+mod tests;
