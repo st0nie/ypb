@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::Write;
 use std::path::Path as FilePath;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
@@ -18,6 +16,33 @@ use tokio_util::io::ReaderStream;
 use tracing::info;
 
 use super::AppState;
+use thiserror::Error;
+use tokio::io::AsyncWriteExt;
+
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("File not found")]
+    NotFound,
+    #[error("Permission denied")]
+    Forbidden,
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("System time error: {0}")]
+    SystemTimeError(#[from] std::time::SystemTimeError),
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match self {
+            AppError::NotFound => (StatusCode::NOT_FOUND, self.to_string()),
+            AppError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
+            AppError::IoError(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+            AppError::SystemTimeError(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+        };
+
+        (status, error_message).into_response()
+    }
+}
 
 fn parse_filehash(file_hash: &str) -> (String, Option<String>) {
     let file_hash = std::path::Path::new(file_hash);
@@ -35,19 +60,20 @@ fn parse_filehash(file_hash: &str) -> (String, Option<String>) {
     (file_name, file_ext)
 }
 
-fn file_to_timestamp(file: &File) -> Result<String, StatusCode> {
-    file.metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_secs().to_string())
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)
+async fn file_to_timestamp(file: &TokioFile) -> Result<String, AppError> {
+    Ok(file
+        .metadata()
+        .await?
+        .modified()?
+        .duration_since(UNIX_EPOCH)?
+        .as_secs()
+        .to_string())
 }
 
 pub async fn get_handler(
     Path(file_hash): Path<String>,
     State(state): State<Arc<AppState>>,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, AppError> {
     let (file_name, file_ext) = parse_filehash(file_hash.as_str());
 
     let dir = &state.args.file_path;
@@ -97,11 +123,11 @@ pub async fn get_handler(
                             .into_response(),
                     )
                 }
-                _ => Err(StatusCode::INTERNAL_SERVER_ERROR),
+                Err(e) => Err(AppError::IoError(e)),
             },
         }
     } else {
-        Err(StatusCode::NOT_FOUND)
+        Err(AppError::NotFound)
     }
 }
 
@@ -110,7 +136,7 @@ pub async fn put_handler(
     header_map: HeaderMap,
     State(state): State<Arc<AppState>>,
     bytes: Bytes,
-) -> Result<String, StatusCode> {
+) -> Result<String, AppError> {
     const HASHER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
 
     use base64::prelude::*;
@@ -119,10 +145,9 @@ pub async fn put_handler(
 
     let file_name = format!("{}.txt", hash);
     let file_path = FilePath::new(&state.args.file_path).join(file_name);
-    let mut file = File::create(&file_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut file = TokioFile::create(&file_path).await?;
 
-    file.write_all(&bytes)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    file.write_all(&bytes).await?;
 
     info!("File saved: hash: {} size: {} bytes", hash, bytes.len());
 
@@ -131,7 +156,7 @@ pub async fn put_handler(
         .and_then(|proto| proto.to_str().ok())
         .unwrap_or(Scheme::HTTP.as_str());
 
-    let timestamp = file_to_timestamp(&file)?;
+    let timestamp = file_to_timestamp(&file).await?;
 
     Ok(formatdoc! {"
         url: {protocal}://{host}/{hash}
@@ -151,26 +176,24 @@ pub async fn delete_handler(
     Path(file_hash): Path<String>,
     State(state): State<Arc<AppState>>,
     secret: String,
-) -> Result<String, StatusCode> {
+) -> Result<String, AppError> {
     let (file_name, _) = parse_filehash(file_hash.as_str());
 
     let dir = &state.args.file_path;
     let file_path = FilePath::new(dir).join(file_name);
 
-    let file = File::open(&file_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let file = TokioFile::open(&file_path).await?;
 
-    let timestamp = file_to_timestamp(&file)?;
+    let timestamp = file_to_timestamp(&file).await?;
 
     if file_path.exists() {
         if secret == timestamp {
-            fs::remove_file(file_path)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            fs::remove_file(file_path).await?;
             Ok(format!("File {} deleted successfully", file_hash))
         } else {
-            Err(StatusCode::FORBIDDEN)
+            Err(AppError::Forbidden)
         }
     } else {
-        Err(StatusCode::NOT_FOUND)
+        Err(AppError::NotFound)
     }
 }

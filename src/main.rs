@@ -12,7 +12,7 @@ use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-pub mod util;
+mod util;
 use util::handler::{delete_handler, get_handler, put_handler};
 use util::{AppState, Args};
 
