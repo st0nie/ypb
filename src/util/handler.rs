@@ -1,23 +1,22 @@
-use std::path::Path as FilePath;
-use std::sync::Arc;
-use std::time::UNIX_EPOCH;
+use std::{path::Path as FilePath, sync::Arc, time::UNIX_EPOCH};
 
-use axum::body::{Body, Bytes};
-use axum::extract::{Path, State};
-use axum::http::uri::Scheme;
-use axum::http::{HeaderMap, StatusCode, header};
-use axum::response::Response;
-use axum::response::{IntoResponse, Redirect};
-use axum_extra::TypedHeader;
-use axum_extra::headers::Host;
+use axum::{
+    body::{Body, Bytes},
+    extract::{Path, State},
+    http::{HeaderMap, StatusCode, header, uri::Scheme},
+    response::{IntoResponse, Redirect, Response},
+};
+use axum_extra::{TypedHeader, headers::Host};
 use indoc::formatdoc;
-use tokio::fs::{self, File as TokioFile};
+use tokio::{
+    fs::{self, File as TokioFile},
+    io::AsyncWriteExt,
+};
 use tokio_util::io::ReaderStream;
 use tracing::info;
 
 use super::AppState;
 use thiserror::Error;
-use tokio::io::AsyncWriteExt;
 
 #[derive(Error, Debug)]
 pub enum AppError {
