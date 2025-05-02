@@ -74,6 +74,36 @@ fn extract_hash(response: &str) -> Option<String> {
 }
 
 #[tokio::test]
+async fn test_hash_format() {
+    // Create a temporary directory for file storage
+    let temp_dir = tempfile::tempdir().unwrap();
+    let (addr, _) = start_test_server(&temp_dir).await;
+
+    // Test data
+    let test_content = "1232\n";
+
+    // 1. Upload content
+    let client = reqwest::Client::new();
+    let res = client
+        .put(&format!("http://{addr}"))
+        .body(test_content)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let body = res.text().await.unwrap();
+    println!("PUT response: {}", body);
+
+    // Extract the hash from the response
+    let hash = extract_hash(&body).expect("Failed to extract hash from response");
+
+    // 2. Check the hash format 
+    assert_eq!(hash, "K8mw");
+}
+
+#[tokio::test]
 async fn test_upload_and_retrieve_success() {
     // Create a temporary directory for file storage
     let temp_dir = tempfile::tempdir().unwrap();
