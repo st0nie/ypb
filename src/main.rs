@@ -10,24 +10,28 @@ use tokio::net::TcpListener;
 use tokio::signal;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod util;
 use util::handler::{delete_handler, get_handler, put_handler};
 use util::{AppState, Args};
 
+const DEFAULT_LOG_LEVEL: LevelFilter = if cfg!(debug_assertions) {
+    LevelFilter::DEBUG
+} else {
+    LevelFilter::INFO
+};
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Enable tracing.
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!(
-                    "{}=debug,tower_http=debug,axum=trace",
-                    env!("CARGO_CRATE_NAME")
-                )
-                .into()
-            }),
+            EnvFilter::builder()
+                .with_default_directive(DEFAULT_LOG_LEVEL.into())
+                .from_env_lossy(),
         )
         .with(tracing_subscriber::fmt::layer().without_time())
         .init();
