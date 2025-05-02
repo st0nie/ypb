@@ -34,9 +34,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros"] }
 tower = { version = "0.5", features = ["util"] }
-axum = "0.8.3"
 http-body-util = "0.1.2"
 tempfile = "3.10.1"
 reqwest = { version = "0.12", features = ["json"] }
