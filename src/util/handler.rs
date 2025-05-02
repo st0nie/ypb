@@ -44,7 +44,7 @@ impl IntoResponse for AppError {
 }
 
 fn parse_filehash(file_hash: &str) -> (String, Option<String>) {
-    let file_hash = std::path::Path::new(file_hash);
+    let file_hash = FilePath::new(file_hash);
     let file_name = format!(
         "{}.txt",
         file_hash
