@@ -184,6 +184,12 @@
   .fixed {
     position: fixed;
   }
+  .top-0 {
+    top: calc(var(--spacing) * 0);
+  }
+  .left-0 {
+    left: calc(var(--spacing) * 0);
+  }
   .container {
     width: 100%;
     @media (width >= 40rem) {
@@ -201,6 +207,9 @@
     @media (width >= 96rem) {
       max-width: 96rem;
     }
+  }
+  .m-0 {
+    margin: calc(var(--spacing) * 0);
   }
   .mx-6 {
     margin-inline: calc(var(--spacing) * 6);
@@ -223,6 +232,9 @@
   .flex {
     display: flex;
   }
+  .hidden {
+    display: none;
+  }
   .table {
     display: table;
   }
@@ -231,6 +243,9 @@
   }
   .h-56 {
     height: calc(var(--spacing) * 56);
+  }
+  .h-full {
+    height: 100%;
   }
   .min-h-10 {
     min-height: calc(var(--spacing) * 10);
@@ -241,11 +256,26 @@
   .w-2xs {
     width: var(--container-2xs);
   }
+  .w-5 {
+    width: calc(var(--spacing) * 5);
+  }
+  .w-5\/12 {
+    width: calc(5/12 * 100%);
+  }
   .w-8 {
     width: calc(var(--spacing) * 8);
   }
-  .w-8\/12 {
-    width: calc(8/12 * 100%);
+  .w-9 {
+    width: calc(var(--spacing) * 9);
+  }
+  .w-9\/12 {
+    width: calc(9/12 * 100%);
+  }
+  .w-10 {
+    width: calc(var(--spacing) * 10);
+  }
+  .w-10\/12 {
+    width: calc(10/12 * 100%);
   }
   .w-15 {
     width: calc(var(--spacing) * 15);
@@ -255,6 +285,9 @@
   }
   .w-25 {
     width: calc(var(--spacing) * 25);
+  }
+  .w-full {
+    width: 100%;
   }
   .w-sm {
     width: var(--container-sm);
@@ -286,6 +319,12 @@
   .items-center {
     align-items: center;
   }
+  .overflow-hidden {
+    overflow: hidden;
+  }
+  .overflow-y-auto {
+    overflow-y: auto;
+  }
   .rounded-sm {
     border-radius: var(--radius-sm);
   }
@@ -303,6 +342,9 @@
   }
   .bg-gray-600 {
     background-color: var(--color-gray-600);
+  }
+  .p-0 {
+    padding: calc(var(--spacing) * 0);
   }
   .p-1 {
     padding: calc(var(--spacing) * 1);
@@ -367,16 +409,6 @@
   .active\:bg-gray-700 {
     &:active {
       background-color: var(--color-gray-700);
-    }
-  }
-  .sm\:w-sm {
-    @media (width >= 40rem) {
-      width: var(--container-sm);
-    }
-  }
-  .sm\:w-xs {
-    @media (width >= 40rem) {
-      width: var(--container-xs);
     }
   }
   .md\:w-md {
