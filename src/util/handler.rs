@@ -68,6 +68,11 @@ async fn file_to_timestamp(file: &TokioFile) -> Result<String, AppError> {
         .as_secs()
         .to_string())
 }
+pub async fn serve_static(path: &str) -> Result<Response, AppError> {
+    let str = fs::read_to_string(path).await?;
+    let response = Response::new(str.into());
+    Ok(response)
+}
 
 pub async fn get_handler(
     Path(file_hash): Path<String>,

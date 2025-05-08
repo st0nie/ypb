@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="./output.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container flex flex-col items-center mx-auto px-3 py-8">
+        <h1 class="text-3xl font-bold mb-4">Hello, YPB!</h1>
+        <textarea id="textInput" placeholder="Paste your text here..."
+            class="border-dashed h-56 min-h-10 w-sm md:w-md lg:w-xl border-2 mt-4"></textarea>
+        <button id="submitButton" class="border rounded-sm hover:bg-black active:bg-gray-700 active:scale-95 transition-transform duration-150 w-25 h-10 mt-3 bg-gray-600 text-white">Submit</button>
+        <div id="responseText" class="mt-4 p-2 w-sm md:w-md lg:w-xl"></div>
+    </div>
+    <script>
+        const textInput = document.getElementById('textInput');
+        const submitButton = document.getElementById('submitButton');
+        const responseTextDiv = document.getElementById('responseText');
+
+        submitButton.addEventListener('click', () => {
+            const text = textInput.value;
+            fetch('/', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'text/plain',
+                },
+                body: text,
+            })
+                .then(response => {
+                    if (response.ok) {
+                        console.log('PUT request successful');
+                        return response.text();
+                        // Optionally, clear the textarea or give user feedback
+                        // textInput.value = ''; 
+                    } else {
+                        console.error('PUT request failed:', response.status, response.statusText);
+                        responseTextDiv.innerText = 'Error: ' + response.status + ' ' + response.statusText;
+                        return null;
+                    }
+                })
+                .then(data => {
+                    if (data !== null) {
+                        responseTextDiv.innerText = data;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error sending PUT request:', error);
+                    responseTextDiv.innerText = 'Error sending request: ' + error;
+                });
+        });
+    </script>
+</body>
+
+</html>

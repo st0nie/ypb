@@ -15,7 +15,7 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod util;
-use util::handler::{delete_handler, get_handler, put_handler};
+use util::handler::{delete_handler, get_handler, put_handler, serve_static};
 use util::{AppState, Args};
 
 const DEFAULT_LOG_LEVEL: LevelFilter = if cfg!(debug_assertions) {
@@ -44,8 +44,13 @@ async fn main() -> Result<()> {
 
     let app_state = Arc::new(AppState { args: args.clone() });
     // Create a regular axum app.
+
     let app = Router::new()
-        .route("/", get("hello, ypb!"))
+        .route("/", get(async || serve_static("web/index.html").await))
+        .route(
+            "/output.css",
+            get(async || serve_static("web/output.css").await),
+        )
         .route("/", put(put_handler))
         .route("/{*hash}", get(get_handler))
         .route("/{*hash}", delete(delete_handler))
