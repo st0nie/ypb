@@ -48,11 +48,11 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route(
             "/",
-            get(async |state: State<Arc<AppState>>| serve_static(state, "web/index.html").await),
+            get(async |state: State<Arc<AppState>>| serve_static(state, "index.html").await),
         )
         .route(
             "/output.css",
-            get(async |state: State<Arc<AppState>>| serve_static(state, "web/output.css").await),
+            get(async |state: State<Arc<AppState>>| serve_static(state, "output.css").await),
         )
         .route("/", put(put_handler))
         .route("/{*hash}", get(get_handler))
