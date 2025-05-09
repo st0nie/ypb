@@ -7,6 +7,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::{TypedHeader, headers::Host};
+use htmlize::escape_text;
 use indoc::formatdoc;
 use tokio::{
     fs::{self, File as TokioFile},
@@ -109,7 +110,7 @@ pub async fn get_handler(
                             "#,
                             state.args.syntax_theme,
                             file_ext.unwrap_or_default(),
-                            content
+                            escape_text(content)
                         }
                     ).into_response())
                 }

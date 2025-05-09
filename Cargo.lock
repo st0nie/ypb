@@ -410,6 +410,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "htmlize"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d347c0de239be20ba0982e4822de3124404281e119ae3e11f5d7425a414e1935"
+dependencies = [
+ "memchr",
+ "pastey",
+]
+
+[[package]]
 name = "http"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -646,6 +656,12 @@ dependencies = [
  "smallvec",
  "windows-targets",
 ]
+
+[[package]]
+name = "pastey"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3a8cb46bdc156b1c90460339ae6bfd45ba0394e5effbaa640badb4987fdc261"
 
 [[package]]
 name = "percent-encoding"
@@ -1217,6 +1233,7 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "crc",
+ "htmlize",
  "indoc",
  "mime_guess",
  "serde",
