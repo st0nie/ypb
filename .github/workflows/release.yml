@@ -26,3 +26,4 @@ jobs:
           RUSTTARGET: ${{ matrix.target }}
           EXTRA_FILES: "README.md LICENSE install/* web/*"
           TOOLCHAIN_VERSION: "nightly"
+          PRE_BUILD: "web/build.sh"
