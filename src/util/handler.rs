@@ -69,7 +69,13 @@ async fn file_to_timestamp(file: &TokioFile) -> Result<String, AppError> {
         .as_secs()
         .to_string())
 }
-pub async fn serve_static(path: &str) -> Result<Response, AppError> {
+pub async fn serve_static(
+    State(state): State<Arc<AppState>>,
+    path: &str,
+) -> Result<Response, AppError> {
+    let dir = &state.args.web_path;
+    let path = FilePath::new(dir).join(path);
+
     let str = fs::read_to_string(path).await?;
     let response = Response::new(str.into());
     Ok(response)

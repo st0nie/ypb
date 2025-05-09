@@ -22,4 +22,8 @@ pub struct Args {
     /// Syntax highlight theme (highlight.js)
     #[clap(short, long, default_value = "vs")]
     pub syntax_theme: String,
+
+    /// Path to the web static files directory
+    #[clap(short, long, default_value = "./web")]
+    pub web_path: String,
 }

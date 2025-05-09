@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use axum::extract::DefaultBodyLimit;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::routing::{delete, put};
 use axum::{Router, routing::get};
 use clap::Parser;
@@ -46,10 +46,13 @@ async fn main() -> Result<()> {
     // Create a regular axum app.
 
     let app = Router::new()
-        .route("/", get(async || serve_static("web/index.html").await))
+        .route(
+            "/",
+            get(async |state: State<Arc<AppState>>| serve_static(state, "web/index.html").await),
+        )
         .route(
             "/output.css",
-            get(async || serve_static("web/output.css").await),
+            get(async |state: State<Arc<AppState>>| serve_static(state, "web/output.css").await),
         )
         .route("/", put(put_handler))
         .route("/{*hash}", get(get_handler))
