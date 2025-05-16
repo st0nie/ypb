@@ -159,6 +159,7 @@ pub async fn put_handler(
     let mut file = TokioFile::create(&file_path).await?;
 
     file.write_all(&bytes).await?;
+    file.flush().await?;
 
     info!("File saved: hash: {} size: {} bytes", hash, bytes.len());
 
