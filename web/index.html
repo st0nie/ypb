@@ -47,8 +47,8 @@
                 .then(response => {
                     if (response.ok) {
                         console.log('PUT request successful');
-                        return response.text();
                         textInput.value = '';
+                        return response.text();
                     } else {
                         console.error('PUT request failed:', response.status, response.statusText);
                         responseTextDiv.innerText = 'Error: ' + response.status + ' ' + response.statusText;
