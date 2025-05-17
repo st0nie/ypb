@@ -3,12 +3,13 @@ use std::{path::Path as FilePath, sync::Arc, time::UNIX_EPOCH};
 use axum::{
     body::{Body, Bytes},
     extract::{Path, State},
-    http::{HeaderMap, StatusCode, header, uri::Scheme},
+    http::{HeaderMap, HeaderValue, StatusCode, header, uri::Scheme},
     response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::{TypedHeader, headers::Host};
 use htmlize::escape_text;
 use indoc::formatdoc;
+use mime_guess::mime;
 use tokio::{
     fs::{self, File as TokioFile},
     io::AsyncWriteExt,
@@ -102,7 +103,7 @@ pub async fn get_handler(
                 } else {
                     Ok((
                         StatusCode::OK,
-                        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                        [(header::CONTENT_TYPE, HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()))],
                         formatdoc! {
                             r#"
                             <head>
