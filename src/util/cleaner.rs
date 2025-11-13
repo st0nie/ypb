@@ -1,4 +1,5 @@
 use anyhow::Result;
+use futures::StreamExt;
 use std::path::Path;
 use tokio::{fs, task::JoinSet};
 use tracing::{error, info};
@@ -16,28 +17,31 @@ pub async fn cleaner_task(storage_path: String, period: u64) -> Result<()> {
 
 async fn clean_up(dir: &str, period: u64) -> Result<()> {
     let path = Path::new(dir);
-    let mut read_dir = fs::read_dir(path).await?;
+    let read_dir = fs::read_dir(path).await?;
 
-    let mut set = JoinSet::new();
+    let read_dir_stream = tokio_stream::wrappers::ReadDirStream::new(read_dir);
 
-    while let Some(entry) = read_dir.next_entry().await? {
-        set.spawn(async move {
-            let file_path = entry.path();
-            let metadata = fs::metadata(&file_path).await?;
-            let last_modified = metadata.modified()?.elapsed()?.as_secs();
+    read_dir_stream
+        .for_each_concurrent(10, |entry| async move {
+            let result: Result<()> = async {
+                let entry = entry?;
+                let file_path = entry.path();
+                let metadata = fs::metadata(&file_path).await?;
+                let last_modified = metadata.modified()?.elapsed()?.as_secs();
 
-            if last_modified > period {
-                fs::remove_file(&file_path).await?;
-                info!("Deleted file: {:?}", file_path);
+                if last_modified > period {
+                    fs::remove_file(&file_path).await?;
+                    info!("Deleted file: {:?}", file_path);
+                }
+                anyhow::Ok(())
             }
-            anyhow::Ok(())
-        });
-    }
+            .await;
 
-    set.join_all().await.into_iter().for_each(|result| {
-        if let Err(e) = result {
-            error!("Error deleting file: {:?}", e);
-        }
-    });
+            if let Err(e) = result {
+                error!("Error processing file: {:?}", e);
+            }
+        })
+        .await;
+
     Ok(())
 }
