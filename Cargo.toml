@@ -17,7 +17,7 @@ rpath = false
 
 [dependencies]
 anyhow = "1.0.98"
-axum = "0.8.3"
+axum = { version = "0.8.3", features = ["tracing"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 base64 = "0.22.1"
 clap = { version = "4.5.37", features = ["derive"] }
