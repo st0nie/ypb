@@ -1,0 +1,12 @@
+services:
+  ypb:
+    image: ghcr.io/st0nie/ypb:master
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./files:/usr/src/dns-rr/files
+    command: [
+      "ypb",
+      "--file-path", "/var/lib/ypb"
+    ]
+    restart: unless-stopped
