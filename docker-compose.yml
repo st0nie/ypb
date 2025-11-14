@@ -4,9 +4,10 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./files:/usr/src/dns-rr/files
+      - ./data:/var/lib/ypb
     command: [
       "ypb",
-      "--file-path", "/var/lib/ypb"
+      "--file-path", "/var/lib/ypb",
+      "--syntax-theme", "atom-one-dark"
     ]
     restart: unless-stopped
