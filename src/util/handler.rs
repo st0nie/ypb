@@ -99,9 +99,35 @@ pub async fn get_handler(
                                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css">
                                 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
                                 <script>hljs.highlightAll();</script>
+                                <style>
+                                    body {{
+                                        background-color: transparent;
+                                        transition: background-color 0.3s, color 0.3s;
+                                    }}
+                                    html {{
+                                        background-color: #f0f0f0;
+                                    }}
+                                </style>
                             </head>
                             <body>
                             <pre><code class="{}">{}</code></pre>
+                            <script>
+                                function syncTheme() {{
+                                    const codeBlock = document.querySelector('.hljs');
+                                    
+                                    if (!codeBlock) return;
+
+                                    const style = window.getComputedStyle(codeBlock);
+                                    const bgColor = style.backgroundColor;
+                                    const textColor = style.color;
+
+                                    document.body.style.backgroundColor = bgColor;
+                                    document.body.style.color = textColor;
+                                    document.documentElement.style.backgroundColor = bgColor;
+                                }}
+
+                                window.addEventListener('load', syncTheme);
+                            </script>
                             </body>
                             "#,
                             state.args.syntax_theme,
