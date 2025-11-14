@@ -42,10 +42,12 @@ async fn main() -> Result<()> {
         std::fs::create_dir_all(&args.file_path).context("Failed to create storage directory")?;
     }
 
-    let app_state = Arc::new(AppState { args: args.clone() });
+    let args_arc = Arc::new(args.clone());
+    let app_state = Arc::new(AppState { args: args_arc });
     // Create a regular axum app.
 
     let app = Router::new()
+        .route("/", get(|| async { include_str!("../README.md") }))
         .route("/", put(put_handler))
         .route("/{*hash}", get(get_handler))
         .route("/{*hash}", delete(delete_handler))
