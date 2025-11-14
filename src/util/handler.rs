@@ -158,14 +158,13 @@ pub async fn get_handler(
     }
 }
 
+const HASHER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
 pub async fn put_handler(
     TypedHeader(host): TypedHeader<Host>,
     header_map: HeaderMap,
     State(state): State<Arc<AppState>>,
     bytes: Bytes,
 ) -> Result<String, AppError> {
-    const HASHER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
-
     use base64::prelude::*;
 
     let hash = &BASE64_URL_SAFE.encode(HASHER.checksum(&bytes).to_be_bytes())[0..4];
@@ -185,18 +184,19 @@ pub async fn put_handler(
         .unwrap_or(Scheme::HTTP.as_str());
 
     let timestamp = file_to_timestamp(&file).await?;
+    let secret = HASHER.checksum(timestamp.as_bytes()).to_string();
 
     Ok(formatdoc! {"
         url: {protocal}://{host}/{hash}
         short: {hash}
         size: {size} bytes
-        secret: {timestamp}
+        secret: {secret}
         ",
         protocal = protocal_str,
         size = bytes.len(),
         hash = hash,
         host = host,
-        timestamp = timestamp
+        secret = secret
     })
 }
 
@@ -213,9 +213,10 @@ pub async fn delete_handler(
     let file = TokioFile::open(&file_path).await?;
 
     let timestamp = file_to_timestamp(&file).await?;
+    let file_secret = HASHER.checksum(timestamp.as_bytes()).to_string();
 
     if file_path.exists() {
-        if secret == timestamp {
+        if secret == file_secret {
             fs::remove_file(file_path).await?;
             Ok(format!("File {} deleted successfully", file_hash))
         } else {
