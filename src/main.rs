@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, put};
 use axum::{Router, routing::get};
 use clap::Parser;
@@ -15,7 +15,7 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod util;
-use util::handler::{delete_handler, get_handler, put_handler, serve_static};
+use util::handler::{delete_handler, get_handler, put_handler};
 use util::{AppState, Args};
 
 const DEFAULT_LOG_LEVEL: LevelFilter = if cfg!(debug_assertions) {

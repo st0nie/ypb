@@ -1,7 +1,7 @@
 use anyhow::Result;
 use futures::StreamExt;
 use std::path::Path;
-use tokio::{fs, task::JoinSet};
+use tokio::fs;
 use tracing::{error, info};
 
 pub async fn cleaner_task(storage_path: String, period: u64) -> Result<()> {
