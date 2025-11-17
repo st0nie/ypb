@@ -24,6 +24,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           RUSTTARGET: ${{ matrix.target }}
-          EXTRA_FILES: "README.md LICENSE install/* web/*"
+          EXTRA_FILES: "README.md LICENSE install/*"
           TOOLCHAIN_VERSION: "nightly"
-          PRE_BUILD: "web/build.sh"
