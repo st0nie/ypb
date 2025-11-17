@@ -4,14 +4,16 @@ use std::path::Path;
 use tokio::fs;
 use tracing::{debug, error, info};
 
+const CLEAN_CHECK_PERIOD_SECS: u64 = 60; // 1 minute
+
 pub async fn cleaner_task(storage_path: String, period: u64) -> Result<()> {
-    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+    tokio::time::sleep(tokio::time::Duration::from_secs(CLEAN_CHECK_PERIOD_SECS)).await;
     loop {
         debug!("Cleaning up expired files in {:?}", storage_path);
         if let Err(e) = clean_up(&storage_path, period).await {
             error!("Error cleaning up files: {:?}", e);
         }
-        tokio::time::sleep(tokio::time::Duration::from_secs(period)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(CLEAN_CHECK_PERIOD_SECS)).await;
     }
 }
 
