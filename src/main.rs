@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
     // Create a `TcpListener` using tokio.
     let listener = TcpListener::bind(format!("0.0.0.0:{}", args.port))
         .await
-        .with_context(|| format!("Failed to listen on port {}", args.port))?;
+        .context(format!("Failed to listen on port {}", args.port))?;
 
     tokio::spawn(util::cleaner::cleaner_task(
         args.file_path,
