@@ -2,12 +2,12 @@ use anyhow::Result;
 use futures::StreamExt;
 use std::path::Path;
 use tokio::fs;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 pub async fn cleaner_task(storage_path: String, period: u64) -> Result<()> {
     tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
     loop {
-        info!("Cleaning up expired files in {:?}", storage_path);
+        debug!("Cleaning up expired files in {:?}", storage_path);
         if let Err(e) = clean_up(&storage_path, period).await {
             error!("Error cleaning up files: {:?}", e);
         }
