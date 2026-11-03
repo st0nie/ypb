@@ -3,10 +3,10 @@ use std::{path::Path as FilePath, sync::Arc, time::UNIX_EPOCH};
 use axum::{
     body::{Body, Bytes},
     extract::{Path, State},
-    http::{HeaderMap, HeaderValue, StatusCode, header, uri::Scheme},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Redirect, Response},
 };
-use axum_extra::{TypedHeader, headers::Host};
+use axum_extra::typed_header::TypedHeaderRejection;
 use htmlize::escape_text;
 use indoc::formatdoc;
 use mime_guess::mime;
@@ -18,6 +18,7 @@ use tokio_util::io::ReaderStream;
 use tracing::info;
 
 use super::AppState;
+use super::base_url::BaseUrl;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -71,6 +72,91 @@ async fn file_to_timestamp(file: &TokioFile) -> Result<String, AppError> {
         .to_string())
 }
 
+/// Renders `content` as a syntax-highlighted HTML page using highlight.js.
+fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
+    (
+        StatusCode::OK,
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
+        )],
+        formatdoc! {
+            r#"
+            <head>
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css">
+                <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+                <script>hljs.highlightAll();</script>
+                <style>
+                    body {{
+                        background-color: transparent;
+                        transition: background-color 0.3s, color 0.3s;
+                    }}
+                    html {{
+                        background-color: #f0f0f0;
+                    }}
+                </style>
+            </head>
+            <body>
+            <pre><code class="{}">{}</code></pre>
+            <script>
+                function syncTheme() {{
+                    const codeBlock = document.querySelector('.hljs');
+                    
+                    if (!codeBlock) return;
+
+                    const style = window.getComputedStyle(codeBlock);
+                    const bgColor = style.backgroundColor;
+                    const textColor = style.color;
+
+                    document.body.style.backgroundColor = bgColor;
+                    document.body.style.color = textColor;
+                    document.documentElement.style.backgroundColor = bgColor;
+                }}
+
+                window.addEventListener('load', syncTheme);
+            </script>
+            </body>
+            "#,
+            theme,
+            language,
+            escape_text(content)
+        },
+    )
+        .into_response()
+}
+
+/// The README doubles as the index page. Its API examples use this origin,
+/// which is replaced with the public base URL when serving the page.
+const INDEX_PAGE: &str = include_str!("../../README.md");
+const INDEX_EXAMPLE_ORIGIN: &str = "http://localhost:3000";
+
+/// Serves the index page: syntax-highlighted Markdown for clients that accept
+/// HTML (browsers), plain text otherwise (e.g. curl).
+pub async fn index_handler(
+    base_url: Result<BaseUrl, TypedHeaderRejection>,
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> Response {
+    let content = match base_url {
+        Ok(BaseUrl(base_url)) => INDEX_PAGE.replace(INDEX_EXAMPLE_ORIGIN, &base_url),
+        Err(_) => INDEX_PAGE.to_string(),
+    };
+
+    let accepts_html = headers
+        .get_all(header::ACCEPT)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .any(|value| value.contains(mime::TEXT_HTML.as_ref()));
+
+    let response = if accepts_html {
+        highlighted_page(&state.args.syntax_theme, "md", &content)
+    } else {
+        content.into_response()
+    };
+
+    ([(header::VARY, header::ACCEPT.as_str())], response).into_response()
+}
+
 pub async fn get_handler(
     Path(file_hash): Path<String>,
     State(state): State<Arc<AppState>>,
@@ -90,51 +176,11 @@ pub async fn get_handler(
                 } else if file_ext.as_ref().is_none_or(|ext| ext == "txt") {
                     Ok(content.into_response())
                 } else {
-                    Ok((
-                        StatusCode::OK,
-                        [(header::CONTENT_TYPE, HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()))],
-                        formatdoc! {
-                            r#"
-                            <head>
-                                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css">
-                                <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
-                                <script>hljs.highlightAll();</script>
-                                <style>
-                                    body {{
-                                        background-color: transparent;
-                                        transition: background-color 0.3s, color 0.3s;
-                                    }}
-                                    html {{
-                                        background-color: #f0f0f0;
-                                    }}
-                                </style>
-                            </head>
-                            <body>
-                            <pre><code class="{}">{}</code></pre>
-                            <script>
-                                function syncTheme() {{
-                                    const codeBlock = document.querySelector('.hljs');
-                                    
-                                    if (!codeBlock) return;
-
-                                    const style = window.getComputedStyle(codeBlock);
-                                    const bgColor = style.backgroundColor;
-                                    const textColor = style.color;
-
-                                    document.body.style.backgroundColor = bgColor;
-                                    document.body.style.color = textColor;
-                                    document.documentElement.style.backgroundColor = bgColor;
-                                }}
-
-                                window.addEventListener('load', syncTheme);
-                            </script>
-                            </body>
-                            "#,
-                            state.args.syntax_theme,
-                            file_ext.unwrap_or_default(),
-                            escape_text(content)
-                        }
-                    ).into_response())
+                    Ok(highlighted_page(
+                        &state.args.syntax_theme,
+                        &file_ext.unwrap_or_default(),
+                        &content,
+                    ))
                 }
             }
             _ => match TokioFile::open(&file_path).await {
@@ -160,8 +206,7 @@ pub async fn get_handler(
 
 const HASHER: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
 pub async fn put_handler(
-    TypedHeader(host): TypedHeader<Host>,
-    header_map: HeaderMap,
+    BaseUrl(base_url): BaseUrl,
     State(state): State<Arc<AppState>>,
     bytes: Bytes,
 ) -> Result<String, AppError> {
@@ -178,25 +223,16 @@ pub async fn put_handler(
 
     info!("File saved: hash: {} size: {} bytes", hash, bytes.len());
 
-    let protocal_str = header_map
-        .get("X-Forwarded-Proto")
-        .and_then(|proto| proto.to_str().ok())
-        .unwrap_or(Scheme::HTTP.as_str());
-
     let timestamp = file_to_timestamp(&file).await?;
     let secret = HASHER.checksum(timestamp.as_bytes()).to_string();
 
     Ok(formatdoc! {"
-        url: {protocal}://{host}/{hash}
+        url: {base_url}/{hash}
         short: {hash}
         size: {size} bytes
         secret: {secret}
         ",
-        protocal = protocal_str,
         size = bytes.len(),
-        hash = hash,
-        host = host,
-        secret = secret
     })
 }
 

@@ -50,13 +50,21 @@ Configure the service using command-line arguments:
 - `--clean-period`: Period to check for expired files (in seconds, default: 3600).
 - `--limit-size`: File size limit (in bytes).
 - `--syntax-theme`: Syntax highlight theme (highlight.js)
+- `--base-url`: Public base URL used in returned links and on the index page, e.g. `https://pb.example.com`. When unset, it is derived from the request's `X-Forwarded-Proto` header (default `http`) and `Host` header, so a reverse proxy should forward the original `Host` (including a non-default port).
 
 Example:
 ```bash
-cargo run -- --port 8080
+cargo run -- --port 8080 --base-url https://pb.example.com
 ```
 
 ### API Endpoints
+
+The examples below use the base URL of the server that serves this page.
+
+#### Index
+- **Method**: `GET`
+- **Path**: `/`
+- **Description**: This document. Browsers (clients sending `Accept: text/html`) get a syntax-highlighted page; other clients get plain text.
 
 #### Upload File
 - **Method**: `PUT`
@@ -65,21 +73,24 @@ cargo run -- --port 8080
 
 curl Example:
 ```bash
-$ echo "1232" | curl -X PUT --data-binary @- "localhost:3000/"
-url: http://localhost:3000/coBF
-size: 4 bytes
-secret: 1745900203
+$ echo "1232" | curl -X PUT --data-binary @- "http://localhost:3000/"
+url: http://localhost:3000/K8mw
+short: K8mw
+size: 5 bytes
+secret: 2505854602
 ```
 
 #### Retrieve File
 - **Method**: `GET`
-- **Path**: `/{file_hash}`
-- **Description**: Retrieve file content by its hash.
+- **Path**: `/{file_hash}` or `/{file_hash}.{ext}`
+- **Description**: Retrieve file content by its hash. Without an extension (or with `.txt`) the raw content is returned; with another extension such as `.md` or `.rs` it is shown as a syntax-highlighted page. Content that is a single URL redirects to that URL.
 
 curl Example:
 ```bash
-$ curl http://localhost:3000/coBF
+$ curl http://localhost:3000/K8mw
 ```
+
+Browser Example: `http://localhost:3000/K8mw.md`
 
 #### Delete File
 - **Method**: `DELETE`
@@ -88,6 +99,6 @@ $ curl http://localhost:3000/coBF
 
 curl Example
 ```bash
-$ echo "1745900203" | curl -X DELETE --data @- http://localhost:3000/coBF
-File coBF deleted successfully.
+$ echo "2505854602" | curl -X DELETE --data @- http://localhost:3000/K8mw
+File K8mw deleted successfully
 ```
