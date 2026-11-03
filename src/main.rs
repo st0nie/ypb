@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use axum::extract::DefaultBodyLimit;
+use axum::http::StatusCode;
 use axum::{Router, routing::get};
 use clap::Parser;
 use tokio::net::TcpListener;
@@ -32,7 +33,7 @@ fn app(app_state: Arc<AppState>) -> Router {
             TraceLayer::new_for_http(),
             // Graceful shutdown will wait for outstanding requests to complete. Add a timeout so
             // requests don't hang forever.
-            TimeoutLayer::new(Duration::from_secs(10)),
+            TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, Duration::from_secs(10)),
             DefaultBodyLimit::max(limit_size),
         ))
         .with_state(app_state)
