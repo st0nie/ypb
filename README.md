@@ -33,7 +33,7 @@ sudo pacman -S ypb
 1. Ensure [Rust](https://www.rust-lang.org/) is installed.
 2. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/st0nie/ypb.git
    cd ypb
    ```
 3. Build and run the service:
