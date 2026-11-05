@@ -64,7 +64,7 @@ The examples below use the base URL of the server that serves this page.
 #### Index
 - **Method**: `GET`
 - **Path**: `/`
-- **Description**: This document. Browsers (clients sending `Accept: text/html`) get a syntax-highlighted page; other clients get plain text.
+- **Description**: This document. Browsers (clients sending `Accept: text/html`) get a rendered Markdown page; other clients get plain text.
 
 #### Upload File
 - **Method**: `PUT`
@@ -83,7 +83,7 @@ secret: 2505854602
 #### Retrieve File
 - **Method**: `GET`
 - **Path**: `/{file_hash}` or `/{file_hash}.{ext}`
-- **Description**: Retrieve file content by its hash. Without an extension (or with `.txt`) the raw content is returned; with another extension such as `.md` or `.rs` it is shown as a syntax-highlighted page. Content that is a single URL redirects to that URL.
+- **Description**: Retrieve file content by its hash. Without an extension (or with `.txt`) the raw content is returned; with `.md` or `.markdown` it is rendered as Markdown HTML; with another extension such as `.rs` it is shown as a syntax-highlighted page. Content that is a single URL redirects to that URL.
 
 curl Example:
 ```bash

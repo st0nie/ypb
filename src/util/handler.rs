@@ -10,6 +10,9 @@ use axum_extra::typed_header::TypedHeaderRejection;
 use htmlize::escape_text;
 use indoc::formatdoc;
 use mime_guess::mime;
+use pulldown_cmark::{
+    CowStr, Event, Options, Parser as MarkdownParser, Tag, html as markdown_html,
+};
 use tokio::{
     fs::{self, File as TokioFile},
     io::AsyncWriteExt,
@@ -83,16 +86,28 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
         formatdoc! {
             r#"
             <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css">
                 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
                 <script>hljs.highlightAll();</script>
                 <style>
+                    html {{
+                        background-color: #f0f0f0;
+                    }}
                     body {{
+                        margin: 0;
                         background-color: transparent;
                         transition: background-color 0.3s, color 0.3s;
                     }}
-                    html {{
-                        background-color: #f0f0f0;
+                    pre {{
+                        margin: 0;
+                    }}
+                    pre code.hljs {{
+                        overflow-x: visible;
+                        width: max-content;
+                        min-width: 100%;
+                        box-sizing: border-box;
                     }}
                 </style>
             </head>
@@ -125,12 +140,243 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
         .into_response()
 }
 
+fn is_safe_markdown_url(url: &str) -> bool {
+    let trimmed = url.trim();
+    match trimmed.split_once(':') {
+        Some((scheme, _)) if !scheme.contains(['/', '?', '#']) => matches!(
+            scheme.to_ascii_lowercase().as_str(),
+            "http" | "https" | "mailto"
+        ),
+        _ => true,
+    }
+}
+
+fn render_markdown(content: &str) -> String {
+    let options = Options::ENABLE_TABLES
+        | Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_FOOTNOTES
+        | Options::ENABLE_GFM;
+
+    let parser = MarkdownParser::new_ext(content, options).map(|event| match event {
+        Event::Html(raw) | Event::InlineHtml(raw) => Event::Text(raw),
+        Event::Start(Tag::Link {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) if !is_safe_markdown_url(&dest_url) => Event::Start(Tag::Link {
+            link_type,
+            dest_url: CowStr::from("#"),
+            title,
+            id,
+        }),
+        Event::Start(Tag::Image {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) if !is_safe_markdown_url(&dest_url) => Event::Start(Tag::Image {
+            link_type,
+            dest_url: CowStr::from(""),
+            title,
+            id,
+        }),
+        other => other,
+    });
+
+    let mut rendered = String::with_capacity(content.len());
+    markdown_html::push_html(&mut rendered, parser);
+    rendered
+}
+
+/// Renders Markdown `content` as a GitHub-flavored HTML page with highlight.js code blocks.
+fn markdown_page(theme: &str, content: &str) -> Response {
+    let rendered = render_markdown(content);
+    (
+        StatusCode::OK,
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
+        )],
+        formatdoc! {
+            r#"
+            <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css">
+                <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+                <script>hljs.highlightAll();</script>
+                <style>
+                    html {{
+                        background-color: #ffffff;
+                    }}
+                    body {{
+                        margin: 0;
+                        background-color: transparent;
+                        color: #1f2328;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+                        line-height: 1.6;
+                        transition: background-color 0.3s, color 0.3s;
+                    }}
+                    .markdown-body {{
+                        max-width: 880px;
+                        margin: 0 auto;
+                        padding: 32px 24px;
+                        box-sizing: border-box;
+                        overflow-wrap: break-word;
+                    }}
+                    .markdown-body > *:first-child {{
+                        margin-top: 0;
+                    }}
+                    .markdown-body h1,
+                    .markdown-body h2,
+                    .markdown-body h3,
+                    .markdown-body h4,
+                    .markdown-body h5,
+                    .markdown-body h6 {{
+                        margin-top: 24px;
+                        margin-bottom: 16px;
+                        font-weight: 600;
+                        line-height: 1.25;
+                    }}
+                    .markdown-body h1,
+                    .markdown-body h2 {{
+                        padding-bottom: 0.3em;
+                        border-bottom: 1px solid rgba(127, 127, 127, 0.25);
+                    }}
+                    .markdown-body p,
+                    .markdown-body ul,
+                    .markdown-body ol,
+                    .markdown-body blockquote,
+                    .markdown-body table,
+                    .markdown-body pre {{
+                        margin-top: 0;
+                        margin-bottom: 16px;
+                    }}
+                    .markdown-body ul,
+                    .markdown-body ol {{
+                        padding-left: 2em;
+                    }}
+                    .markdown-body li + li {{
+                        margin-top: 0.25em;
+                    }}
+                    .markdown-body a {{
+                        color: #0969da;
+                        text-decoration: none;
+                    }}
+                    .markdown-body a:hover {{
+                        text-decoration: underline;
+                    }}
+                    .markdown-body code {{
+                        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+                        font-size: 85%;
+                        padding: 0.2em 0.4em;
+                        border-radius: 6px;
+                        background-color: rgba(127, 127, 127, 0.12);
+                    }}
+                    .markdown-body pre {{
+                        padding: 16px;
+                        overflow-x: auto;
+                        border-radius: 6px;
+                        border: 1px solid rgba(127, 127, 127, 0.25);
+                        background-color: rgba(127, 127, 127, 0.06);
+                    }}
+                    .markdown-body pre code,
+                    .markdown-body pre code.hljs {{
+                        padding: 0;
+                        background: transparent;
+                        border-radius: 0;
+                        font-size: 85%;
+                        line-height: 1.45;
+                        overflow-x: visible;
+                    }}
+                    .markdown-body blockquote {{
+                        margin-left: 0;
+                        margin-right: 0;
+                        padding: 0 1em;
+                        opacity: 0.85;
+                        border-left: 0.25em solid rgba(127, 127, 127, 0.35);
+                    }}
+                    .markdown-body table {{
+                        display: block;
+                        width: max-content;
+                        max-width: 100%;
+                        overflow-x: auto;
+                        border-collapse: collapse;
+                    }}
+                    .markdown-body th,
+                    .markdown-body td {{
+                        padding: 6px 13px;
+                        border: 1px solid rgba(127, 127, 127, 0.3);
+                    }}
+                    .markdown-body tr:nth-child(2n) {{
+                        background-color: rgba(127, 127, 127, 0.05);
+                    }}
+                    .markdown-body hr {{
+                        height: 0.25em;
+                        padding: 0;
+                        margin: 24px 0;
+                        background-color: rgba(127, 127, 127, 0.25);
+                        border: 0;
+                    }}
+                    .markdown-body img {{
+                        max-width: 100%;
+                        box-sizing: border-box;
+                    }}
+                </style>
+            </head>
+            <body>
+            <main class="markdown-body">{}</main>
+            <script>
+                function syncTheme() {{
+                    let probe = document.querySelector('.hljs');
+                    let temp = false;
+                    if (!probe) {{
+                        probe = document.createElement('code');
+                        probe.className = 'hljs';
+                        probe.style.display = 'none';
+                        document.body.appendChild(probe);
+                        temp = true;
+                    }}
+
+                    const style = window.getComputedStyle(probe);
+                    const bgColor = style.backgroundColor;
+                    const textColor = style.color;
+
+                    if (temp) {{
+                        probe.remove();
+                    }}
+
+                    document.body.style.backgroundColor = bgColor;
+                    document.body.style.color = textColor;
+                    document.documentElement.style.backgroundColor = bgColor;
+                }}
+
+                window.addEventListener('load', syncTheme);
+            </script>
+            </body>
+            "#,
+            theme,
+            rendered
+        },
+    )
+        .into_response()
+}
+
+fn is_markdown_ext(ext: &str) -> bool {
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "md" | "markdown" | "mdown" | "mkd"
+    )
+}
+
 /// The README doubles as the index page. Its API examples use this origin,
 /// which is replaced with the public base URL when serving the page.
 const INDEX_PAGE: &str = include_str!("../../README.md");
 const INDEX_EXAMPLE_ORIGIN: &str = "http://localhost:3000";
 
-/// Serves the index page: syntax-highlighted Markdown for clients that accept
+/// Serves the index page: rendered Markdown HTML for clients that accept
 /// HTML (browsers), plain text otherwise (e.g. curl).
 pub async fn index_handler(
     base_url: Result<BaseUrl, TypedHeaderRejection>,
@@ -149,7 +395,7 @@ pub async fn index_handler(
         .any(|value| value.contains(mime::TEXT_HTML.as_ref()));
 
     let response = if accepts_html {
-        highlighted_page(&state.args.syntax_theme, "md", &content)
+        markdown_page(&state.args.syntax_theme, &content)
     } else {
         content.into_response()
     };
@@ -175,6 +421,8 @@ pub async fn get_handler(
                     Ok(Redirect::temporary(&content).into_response())
                 } else if file_ext.as_ref().is_none_or(|ext| ext == "txt") {
                     Ok(content.into_response())
+                } else if file_ext.as_deref().is_some_and(is_markdown_ext) {
+                    Ok(markdown_page(&state.args.syntax_theme, &content))
                 } else {
                     Ok(highlighted_page(
                         &state.args.syntax_theme,

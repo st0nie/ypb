@@ -193,7 +193,7 @@ mod tests {
         assert_eq!(content_type(&response), "text/html; charset=utf-8");
         assert_eq!(response.headers()[header::VARY], "accept");
         let body = body_text(response).await;
-        assert!(body.contains(r#"<pre><code class="md"># YPB"#));
+        assert!(body.contains(r#"<main class="markdown-body"><h1>YPB</h1>"#));
         assert!(body.contains("styles/vs.css"));
         assert!(body.contains("$ curl https://pb.example.com/K8mw"));
         assert!(!body.contains("localhost:3000"));
@@ -257,8 +257,20 @@ mod tests {
         assert!(
             body_text(response)
                 .await
-                .contains(r#"<pre><code class="md"># hello"#)
+                .contains(r#"<main class="markdown-body"><h1>hello</h1>"#)
         );
+
+        let response = app
+            .send(
+                Request::get(format!("/{short}.rs"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(content_type(&response), "text/html; charset=utf-8");
+        let rs_body = body_text(response).await;
+        assert!(rs_body.contains(r#"<pre><code class="rs"># hello"#));
+        assert!(rs_body.contains("overflow-x: visible;"));
 
         let response = app
             .send(
@@ -315,5 +327,46 @@ mod tests {
             .await;
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn markdown_renders_gfm_and_escapes_unsafe_html() {
+        let app = TestApp::new("markdown-gfm", &[]);
+        let md = "# Title\n\n- [x] done\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```rust\nfn main() {}\n```\n\n<script>alert(1)</script>\n\n[bad](javascript:alert(1)) [ok](https://example.com)\n";
+        let response = app
+            .send(
+                Request::put("/")
+                    .header(header::HOST, "pb.example.com")
+                    .body(Body::from(md))
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let put_body = body_text(response).await;
+        let short = put_body
+            .lines()
+            .nth(1)
+            .unwrap()
+            .strip_prefix("short: ")
+            .unwrap();
+
+        let response = app
+            .send(
+                Request::get(format!("/{short}.md"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let html = body_text(response).await;
+        assert!(html.contains("<h1>Title</h1>"));
+        assert!(html.contains(r#"type="checkbox""#));
+        assert!(html.contains("<table>"));
+        assert!(html.contains(r#"<pre><code class="language-rust">fn main() {}"#));
+        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(!html.contains("<script>alert(1)</script>"));
+        assert!(!html.contains("javascript:alert(1)"));
+        assert!(html.contains(r##"<a href="#">bad</a>"##));
+        assert!(html.contains(r#"<a href="https://example.com">ok</a>"#));
     }
 }
