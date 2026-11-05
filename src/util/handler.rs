@@ -101,9 +101,52 @@ fn resolve_theme_pair(theme: &str) -> (&str, &str) {
     }
 }
 
-/// Renders `content` as a syntax-highlighted HTML page using highlight.js.
+/// Maps file extensions not natively aliased by highlight.js's common bundle
+/// to a supported highlight.js language identifier.
+fn resolve_language<'a>(language: &'a str, content: &str) -> &'a str {
+    match language.to_ascii_lowercase().as_str() {
+        "lock" => {
+            let trimmed = content.trim_start();
+            if trimmed.starts_with('{') {
+                "json"
+            } else if content.lines().any(|line| {
+                let l = line.trim_start();
+                l.starts_with('[') || l.contains(" = ")
+            }) {
+                "toml"
+            } else if content.lines().any(|line| line.trim_end().ends_with(':')) {
+                "yaml"
+            } else {
+                "toml"
+            }
+        }
+        "conf" | "cfg" | "service" | "socket" | "timer" | "mount" | "target" | "path" | "slice"
+        | "desktop" | "repo" | "gitconfig" | "editorconfig" => "ini",
+        "zsh" | "bashrc" | "zshrc" | "profile" | "env" | "pkgbuild" | "ebuild" | "apkbuild" => {
+            "bash"
+        }
+        "jsonc" | "jsonl" | "ndjson" | "geojson" | "har" | "webmanifest" => "json",
+        "htm" | "vue" | "svelte" => "html",
+        _ => language,
+    }
+}
+
+/// Renders `content` as a syntax-highlighted HTML page using highlight.js,
+/// with sticky line numbers, `#L<n>` / `#L<start>-L<end>` deep links, and raw copy.
 fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
+    use std::fmt::Write;
+
     let (light_theme, dark_theme) = resolve_theme_pair(theme);
+    let resolved_language = resolve_language(language, content);
+    let line_count = content.lines().count().max(1);
+    let mut line_numbers = String::with_capacity(line_count * 64);
+    for line in 1..=line_count {
+        let _ = writeln!(
+            line_numbers,
+            r##"<a id="L{line}" class="line-num" href="#L{line}" data-line="{line}">{line}</a>"##
+        );
+    }
+
     (
         StatusCode::OK,
         [(
@@ -121,11 +164,28 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
                 <script>hljs.highlightAll();</script>
                 <style>
+                    :root {{
+                        --code-font: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+                        --line-height: 20px;
+                        --v-pad: 12px;
+                        --gutter-bg: #ffffff;
+                        --gutter-border: rgba(127, 127, 127, 0.2);
+                        --line-highlight-bg: rgba(255, 212, 0, 0.22);
+                        --line-num-active-bg: rgba(255, 212, 0, 0.32);
+                        --btn-bg: rgba(127, 127, 127, 0.12);
+                        --btn-hover-bg: rgba(127, 127, 127, 0.22);
+                        --btn-border: rgba(127, 127, 127, 0.3);
+                    }}
                     html {{
                         background-color: #ffffff;
                         color: #1f2328;
                     }}
                     @media (prefers-color-scheme: dark) {{
+                        :root {{
+                            --gutter-bg: #1e1e1e;
+                            --line-highlight-bg: rgba(255, 212, 0, 0.14);
+                            --line-num-active-bg: rgba(255, 212, 0, 0.24);
+                        }}
                         html {{
                             background-color: #1e1e1e;
                             color: #d4d4d4;
@@ -135,20 +195,142 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                         margin: 0;
                         background-color: transparent;
                     }}
+                    .code-view {{
+                        display: flex;
+                        min-width: 100%;
+                        width: max-content;
+                        position: relative;
+                    }}
+                    .line-numbers {{
+                        position: sticky;
+                        left: 0;
+                        z-index: 3;
+                        user-select: none;
+                        -webkit-user-select: none;
+                        padding: var(--v-pad) 0;
+                        text-align: right;
+                        font-family: var(--code-font);
+                        font-size: 13px;
+                        line-height: var(--line-height);
+                        background-color: var(--gutter-bg);
+                        border-right: 1px solid var(--gutter-border);
+                        flex-shrink: 0;
+                    }}
+                    .line-num {{
+                        display: block;
+                        padding: 0 12px;
+                        height: var(--line-height);
+                        line-height: var(--line-height);
+                        color: inherit;
+                        opacity: 0.45;
+                        text-decoration: none;
+                        cursor: pointer;
+                        box-sizing: border-box;
+                    }}
+                    .line-num:hover {{
+                        opacity: 0.85;
+                        text-decoration: underline;
+                    }}
+                    .line-num.active {{
+                        opacity: 1;
+                        font-weight: 600;
+                        background-color: var(--line-num-active-bg);
+                    }}
+                    .code-area {{
+                        position: relative;
+                        flex: 1;
+                        min-width: 0;
+                    }}
+                    .line-highlight {{
+                        display: none;
+                        position: absolute;
+                        left: 0;
+                        right: 0;
+                        pointer-events: none;
+                        z-index: 2;
+                        background-color: var(--line-highlight-bg);
+                    }}
                     pre {{
                         margin: 0;
+                        position: relative;
+                        z-index: 1;
                     }}
+                    pre code,
                     pre code.hljs {{
+                        display: block;
                         overflow-x: visible;
                         width: max-content;
                         min-width: 100%;
                         box-sizing: border-box;
+                        padding: var(--v-pad) 16px;
+                        font-family: var(--code-font);
+                        font-size: 13px;
+                        line-height: var(--line-height);
+                    }}
+                    .toolbar {{
+                        position: fixed;
+                        top: 12px;
+                        right: 16px;
+                        z-index: 10;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        user-select: none;
+                        -webkit-user-select: none;
+                    }}
+                    .copy-toast {{
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                        font-size: 12px;
+                        padding: 4px 8px;
+                        border-radius: 6px;
+                        background-color: var(--gutter-bg);
+                        border: 1px solid var(--btn-border);
+                        opacity: 0;
+                        transition: opacity 0.15s ease;
+                        pointer-events: none;
+                    }}
+                    .copy-toast.visible {{
+                        opacity: 0.92;
+                    }}
+                    .copy-btn {{
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                        font-size: 12px;
+                        line-height: 1.4;
+                        padding: 5px 10px;
+                        border-radius: 6px;
+                        border: 1px solid var(--btn-border);
+                        background-color: var(--gutter-bg);
+                        color: inherit;
+                        cursor: pointer;
+                        opacity: 0.8;
+                        transition: opacity 0.15s ease, background-color 0.15s ease;
+                    }}
+                    .copy-btn:hover {{
+                        opacity: 1;
+                        background-color: var(--btn-hover-bg);
                     }}
                 </style>
             </head>
             <body>
-            <pre><code class="{}">{}</code></pre>
+            <div class="toolbar">
+                <span id="copy-toast" class="copy-toast" aria-live="polite"></span>
+                <button id="copy-raw-btn" class="copy-btn" type="button" title="Copy raw file content">Copy</button>
+            </div>
+            <div class="code-view">
+                <div id="line-numbers" class="line-numbers" aria-hidden="true">
+            {}    </div>
+                <div class="code-area">
+                    <div id="line-highlight" class="line-highlight" aria-hidden="true"></div>
+                    <pre><code class="{}">{}</code></pre>
+                </div>
+            </div>
             <script>
+                const LINE_HEIGHT = 20;
+                const TOP_PAD = 12;
+                const TOTAL_LINES = {};
+                let anchorLine = null;
+                let toastTimer = null;
+
                 function syncTheme() {{
                     const codeBlock = document.querySelector('.hljs');
                     if (!codeBlock) return;
@@ -160,17 +342,133 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                     document.body.style.backgroundColor = bgColor;
                     document.body.style.color = textColor;
                     document.documentElement.style.backgroundColor = bgColor;
+                    document.documentElement.style.setProperty('--gutter-bg', bgColor);
                 }}
 
-                window.addEventListener('load', syncTheme);
+                function copyToClipboard(text) {{
+                    if (navigator.clipboard && navigator.clipboard.writeText) {{
+                        return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+                    }}
+                    return Promise.resolve(fallbackCopy(text));
+                }}
+
+                function fallbackCopy(text) {{
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try {{
+                        document.execCommand('copy');
+                    }} finally {{
+                        document.body.removeChild(ta);
+                    }}
+                }}
+
+                function showToast(message) {{
+                    const toast = document.getElementById('copy-toast');
+                    if (!toast) return;
+                    toast.textContent = message;
+                    toast.classList.add('visible');
+                    if (toastTimer) clearTimeout(toastTimer);
+                    toastTimer = setTimeout(() => toast.classList.remove('visible'), 1600);
+                }}
+
+                function parseLineRange(hash) {{
+                    const match = /^#L(\d+)(?:-L?(\d+))?$/i.exec(hash || '');
+                    if (!match) return null;
+                    const rawStart = parseInt(match[1], 10);
+                    const rawEnd = match[2] ? parseInt(match[2], 10) : rawStart;
+                    if (!rawStart || !rawEnd) return null;
+                    const start = Math.max(1, Math.min(TOTAL_LINES, Math.min(rawStart, rawEnd)));
+                    const end = Math.max(1, Math.min(TOTAL_LINES, Math.max(rawStart, rawEnd)));
+                    return [start, end];
+                }}
+
+                function applyLineHighlight(shouldScroll) {{
+                    const activeNums = document.querySelectorAll('.line-num.active');
+                    activeNums.forEach((el) => el.classList.remove('active'));
+
+                    const overlay = document.getElementById('line-highlight');
+                    const range = parseLineRange(window.location.hash);
+                    if (!range) {{
+                        if (overlay) overlay.style.display = 'none';
+                        return;
+                    }}
+
+                    const [start, end] = range;
+                    if (anchorLine === null) anchorLine = start;
+
+                    for (let i = start; i <= end; i++) {{
+                        const el = document.getElementById('L' + i);
+                        if (el) el.classList.add('active');
+                    }}
+
+                    if (overlay) {{
+                        overlay.style.top = (TOP_PAD + (start - 1) * LINE_HEIGHT) + 'px';
+                        overlay.style.height = ((end - start + 1) * LINE_HEIGHT) + 'px';
+                        overlay.style.display = 'block';
+                    }}
+
+                    if (shouldScroll) {{
+                        const firstEl = document.getElementById('L' + start);
+                        if (firstEl) firstEl.scrollIntoView({{ block: 'center' }});
+                    }}
+                }}
+
+                document.getElementById('line-numbers').addEventListener('click', (event) => {{
+                    const link = event.target.closest('.line-num');
+                    if (!link || event.metaKey || event.ctrlKey || event.altKey || event.button !== 0) return;
+                    event.preventDefault();
+
+                    const clickedLine = parseInt(link.dataset.line, 10);
+                    if (!clickedLine) return;
+
+                    let hash;
+                    if (event.shiftKey && anchorLine !== null) {{
+                        const start = Math.min(anchorLine, clickedLine);
+                        const end = Math.max(anchorLine, clickedLine);
+                        hash = start === end ? '#L' + start : '#L' + start + '-L' + end;
+                    }} else {{
+                        anchorLine = clickedLine;
+                        hash = '#L' + clickedLine;
+                    }}
+
+                    history.replaceState(null, '', hash);
+                    applyLineHighlight(false);
+                    copyToClipboard(window.location.href).then(() => {{
+                        showToast('Copied ' + hash + ' link');
+                    }});
+                }});
+
+                document.getElementById('copy-raw-btn').addEventListener('click', () => {{
+                    const codeEl = document.querySelector('pre code');
+                    if (!codeEl) return;
+                    const btn = document.getElementById('copy-raw-btn');
+                    copyToClipboard(codeEl.textContent || '').then(() => {{
+                        btn.textContent = 'Copied!';
+                        showToast('Copied raw content');
+                        setTimeout(() => {{ btn.textContent = 'Copy'; }}, 1500);
+                    }});
+                }});
+
+                window.addEventListener('DOMContentLoaded', () => applyLineHighlight(true));
+                window.addEventListener('load', () => {{
+                    syncTheme();
+                    applyLineHighlight(false);
+                }});
+                window.addEventListener('hashchange', () => applyLineHighlight(true));
                 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
             </script>
             </body>
             "#,
             light_theme,
             dark_theme,
-            language,
-            escape_text(content)
+            line_numbers,
+            resolved_language,
+            escape_text(content),
+            line_count
         },
     )
         .into_response()

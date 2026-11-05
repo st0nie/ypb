@@ -5,6 +5,7 @@ YPB (Yet another PasteBin) is a Rust-based temporary Pastebin service and URL sh
 ## Features
 
 - **File Upload**: Upload files via HTTP interface.
+- **Syntax Highlighting & Line Links**: View code with line numbers, `#L10` / `#L10-L20` line-range deep links (click or Shift-click a line number to highlight and copy the link), common extension mapping (such as `.lock`), and one-click raw content copy.
 - **File Cleanup**: Periodically check and delete expired files.
 
 ## Installation
@@ -83,7 +84,7 @@ secret: 2505854602
 #### Retrieve File
 - **Method**: `GET`
 - **Path**: `/{file_hash}` or `/{file_hash}.{ext}`
-- **Description**: Retrieve file content by its hash. Without an extension (or with `.txt`) the raw content is returned; with `.md` or `.markdown` it is rendered as Markdown HTML; with another extension such as `.rs` it is shown as a syntax-highlighted page. Content that is a single URL redirects to that URL.
+- **Description**: Retrieve file content by its hash. Without an extension (or with `.txt`) the raw content is returned; with `.md` or `.markdown` it is rendered as Markdown HTML; with another extension such as `.rs` or `.lock` it is shown as a syntax-highlighted page with sticky line numbers, clickable `#L<n>` / Shift-click `#L<start>-L<end>` line-range links (automatically copied to the clipboard), and a copy-all button. Content that is a single URL redirects to that URL.
 
 curl Example:
 ```bash
