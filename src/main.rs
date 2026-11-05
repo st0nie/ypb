@@ -15,7 +15,7 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod util;
-use util::handler::{delete_handler, get_handler, index_handler, put_handler};
+use util::handler::{delete_handler, doc_handler, get_handler, index_handler, put_handler};
 use util::{AppState, Args};
 
 const DEFAULT_LOG_LEVEL: LevelFilter = if cfg!(debug_assertions) {
@@ -28,6 +28,8 @@ fn app(app_state: Arc<AppState>) -> Router {
     let limit_size = app_state.args.limit_size;
     Router::new()
         .route("/", get(index_handler).put(put_handler))
+        .route("/README.md", get(index_handler))
+        .route("/docs/{doc}", get(doc_handler))
         .route("/{*hash}", get(get_handler).delete(delete_handler))
         .layer((
             TraceLayer::new_for_http(),
@@ -424,6 +426,47 @@ mod tests {
         assert!(html.contains("position: sticky;"));
         assert!(html.contains("user-select: none;"));
         assert!(html.contains(r#"id="copy-raw-btn""#));
+        assert!(html.contains(r#"id="clear-line-btn""#));
+        assert!(html.contains("function clearLineSelection()"));
+        assert!(html.contains("function scrollToLine(line)"));
+        assert!(html.contains("scroll-margin-top: max(140px, 28vh);"));
         assert!(html.contains("const TOTAL_LINES = 5;"));
+    }
+
+    #[tokio::test]
+    async fn embedded_docs_are_served_in_html_and_plain_text() {
+        let app = TestApp::new("embedded-docs", &[]);
+
+        let response = app
+            .send(
+                Request::get("/docs/install.md")
+                    .header(header::ACCEPT, BROWSER_ACCEPT)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(content_type(&response), "text/html; charset=utf-8");
+        assert!(
+            body_text(response)
+                .await
+                .contains("<h1>Installation &amp; Configuration</h1>")
+        );
+
+        let response = app
+            .send(
+                Request::get("/docs/architecture.md")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(content_type(&response), "text/plain; charset=utf-8");
+        assert!(body_text(response).await.starts_with("# YPB Architecture"));
+
+        let response = app
+            .send(Request::get("/docs/unknown.md").body(Body::empty()).unwrap())
+            .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }

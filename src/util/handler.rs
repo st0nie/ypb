@@ -179,6 +179,7 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                     html {{
                         background-color: #ffffff;
                         color: #1f2328;
+                        scroll-padding-top: max(140px, 28vh);
                     }}
                     @media (prefers-color-scheme: dark) {{
                         :root {{
@@ -221,6 +222,7 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                         padding: 0 12px;
                         height: var(--line-height);
                         line-height: var(--line-height);
+                        scroll-margin-top: max(140px, 28vh);
                         color: inherit;
                         opacity: 0.45;
                         text-decoration: none;
@@ -314,6 +316,7 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
             <body>
             <div class="toolbar">
                 <span id="copy-toast" class="copy-toast" aria-live="polite"></span>
+                <button id="clear-line-btn" class="copy-btn" type="button" title="Clear selected lines (Esc)" hidden></button>
                 <button id="copy-raw-btn" class="copy-btn" type="button" title="Copy raw file content">Copy</button>
             </div>
             <div class="code-view">
@@ -386,14 +389,29 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                     return [start, end];
                 }}
 
+                function scrollToLine(line) {{
+                    const contextOffset = Math.max(140, Math.floor(window.innerHeight * 0.28));
+                    const targetTop = Math.max(0, TOP_PAD + (line - 1) * LINE_HEIGHT - contextOffset);
+                    window.scrollTo({{ top: targetTop, left: window.scrollX }});
+                }}
+
+                function clearLineSelection() {{
+                    anchorLine = null;
+                    history.replaceState(null, '', window.location.pathname + window.location.search);
+                    applyLineHighlight(false);
+                    showToast('Cleared line selection');
+                }}
+
                 function applyLineHighlight(shouldScroll) {{
                     const activeNums = document.querySelectorAll('.line-num.active');
                     activeNums.forEach((el) => el.classList.remove('active'));
 
                     const overlay = document.getElementById('line-highlight');
+                    const clearBtn = document.getElementById('clear-line-btn');
                     const range = parseLineRange(window.location.hash);
                     if (!range) {{
                         if (overlay) overlay.style.display = 'none';
+                        if (clearBtn) clearBtn.hidden = true;
                         return;
                     }}
 
@@ -411,9 +429,14 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                         overlay.style.display = 'block';
                     }}
 
+                    if (clearBtn) {{
+                        const label = start === end ? '#L' + start : '#L' + start + '-L' + end;
+                        clearBtn.textContent = label + ' \u00d7';
+                        clearBtn.hidden = false;
+                    }}
+
                     if (shouldScroll) {{
-                        const firstEl = document.getElementById('L' + start);
-                        if (firstEl) firstEl.scrollIntoView({{ block: 'center' }});
+                        scrollToLine(start);
                     }}
                 }}
 
@@ -424,6 +447,17 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
 
                     const clickedLine = parseInt(link.dataset.line, 10);
                     if (!clickedLine) return;
+
+                    const currentRange = parseLineRange(window.location.hash);
+                    if (
+                        !event.shiftKey &&
+                        currentRange &&
+                        currentRange[0] === clickedLine &&
+                        currentRange[1] === clickedLine
+                    ) {{
+                        clearLineSelection();
+                        return;
+                    }}
 
                     let hash;
                     if (event.shiftKey && anchorLine !== null) {{
@@ -442,6 +476,16 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                     }});
                 }});
 
+                document.getElementById('clear-line-btn').addEventListener('click', () => {{
+                    clearLineSelection();
+                }});
+
+                document.addEventListener('keydown', (event) => {{
+                    if (event.key === 'Escape' && parseLineRange(window.location.hash)) {{
+                        clearLineSelection();
+                    }}
+                }});
+
                 document.getElementById('copy-raw-btn').addEventListener('click', () => {{
                     const codeEl = document.querySelector('pre code');
                     if (!codeEl) return;
@@ -456,7 +500,8 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                 window.addEventListener('DOMContentLoaded', () => applyLineHighlight(true));
                 window.addEventListener('load', () => {{
                     syncTheme();
-                    applyLineHighlight(false);
+                    applyLineHighlight(true);
+                    requestAnimationFrame(() => applyLineHighlight(true));
                 }});
                 window.addEventListener('hashchange', () => applyLineHighlight(true));
                 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
@@ -704,7 +749,25 @@ fn is_markdown_ext(ext: &str) -> bool {
 /// The README doubles as the index page. Its API examples use this origin,
 /// which is replaced with the public base URL when serving the page.
 const INDEX_PAGE: &str = include_str!("../../README.md");
+const INSTALL_DOC: &str = include_str!("../../docs/install.md");
+const ARCHITECTURE_DOC: &str = include_str!("../../docs/architecture.md");
 const INDEX_EXAMPLE_ORIGIN: &str = "http://localhost:3000";
+
+fn negotiate_markdown_response(headers: &HeaderMap, theme: &str, content: String) -> Response {
+    let accepts_html = headers
+        .get_all(header::ACCEPT)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .any(|value| value.contains(mime::TEXT_HTML.as_ref()));
+
+    let response = if accepts_html {
+        markdown_page(theme, &content)
+    } else {
+        content.into_response()
+    };
+
+    ([(header::VARY, header::ACCEPT.as_str())], response).into_response()
+}
 
 /// Serves the index page: rendered Markdown HTML for clients that accept
 /// HTML (browsers), plain text otherwise (e.g. curl).
@@ -718,19 +781,26 @@ pub async fn index_handler(
         Err(_) => INDEX_PAGE.to_string(),
     };
 
-    let accepts_html = headers
-        .get_all(header::ACCEPT)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .any(|value| value.contains(mime::TEXT_HTML.as_ref()));
+    negotiate_markdown_response(&headers, &state.args.syntax_theme, content)
+}
 
-    let response = if accepts_html {
-        markdown_page(&state.args.syntax_theme, &content)
-    } else {
-        content.into_response()
+/// Serves embedded project documentation under `/docs/{doc}`.
+pub async fn doc_handler(
+    Path(doc_name): Path<String>,
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, AppError> {
+    let content = match doc_name.as_str() {
+        "install.md" => INSTALL_DOC,
+        "architecture.md" => ARCHITECTURE_DOC,
+        _ => return Err(AppError::NotFound),
     };
 
-    ([(header::VARY, header::ACCEPT.as_str())], response).into_response()
+    Ok(negotiate_markdown_response(
+        &headers,
+        &state.args.syntax_theme,
+        content.to_string(),
+    ))
 }
 
 pub async fn get_handler(
