@@ -195,6 +195,8 @@ mod tests {
         let body = body_text(response).await;
         assert!(body.contains(r#"<main class="markdown-body"><h1>YPB</h1>"#));
         assert!(body.contains("styles/vs.css"));
+        assert!(body.contains("styles/vs2015.css"));
+        assert!(!body.contains("syncTheme"));
         assert!(body.contains("$ curl https://pb.example.com/K8mw"));
         assert!(!body.contains("localhost:3000"));
         assert!(!body.contains("internal:3000"));

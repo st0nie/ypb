@@ -75,8 +75,35 @@ async fn file_to_timestamp(file: &TokioFile) -> Result<String, AppError> {
         .to_string())
 }
 
+fn resolve_theme_pair(theme: &str) -> (&str, &str) {
+    match theme {
+        "vs" | "vs2015" => ("vs", "vs2015"),
+        "github" | "github-dark" => ("github", "github-dark"),
+        "atom-one" | "atom-one-light" | "atom-one-dark" => ("atom-one-light", "atom-one-dark"),
+        "tokyo-night" | "tokyo-night-light" | "tokyo-night-dark" => {
+            ("tokyo-night-light", "tokyo-night-dark")
+        }
+        "solarized" | "solarized-light" | "solarized-dark" => ("solarized-light", "solarized-dark"),
+        "stackoverflow" | "stackoverflow-light" | "stackoverflow-dark" => {
+            ("stackoverflow-light", "stackoverflow-dark")
+        }
+        "nnfx" | "nnfx-light" | "nnfx-dark" => ("nnfx-light", "nnfx-dark"),
+        "a11y" | "a11y-light" | "a11y-dark" => ("a11y-light", "a11y-dark"),
+        "panda-syntax" | "panda-syntax-light" | "panda-syntax-dark" => {
+            ("panda-syntax-light", "panda-syntax-dark")
+        }
+        "isbl-editor" | "isbl-editor-light" | "isbl-editor-dark" => {
+            ("isbl-editor-light", "isbl-editor-dark")
+        }
+        "qtcreator" | "qtcreator-light" | "qtcreator-dark" => ("qtcreator-light", "qtcreator-dark"),
+        "base16/onedark" | "base16/one-light" => ("base16/one-light", "base16/onedark"),
+        other => (other, other),
+    }
+}
+
 /// Renders `content` as a syntax-highlighted HTML page using highlight.js.
 fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
+    let (light_theme, dark_theme) = resolve_theme_pair(theme);
     (
         StatusCode::OK,
         [(
@@ -88,17 +115,25 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css">
+                <meta name="color-scheme" content="light dark">
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css" media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)">
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css" media="(prefers-color-scheme: dark)">
                 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
                 <script>hljs.highlightAll();</script>
                 <style>
                     html {{
-                        background-color: #f0f0f0;
+                        background-color: #ffffff;
+                        color: #1f2328;
+                    }}
+                    @media (prefers-color-scheme: dark) {{
+                        html {{
+                            background-color: #1e1e1e;
+                            color: #d4d4d4;
+                        }}
                     }}
                     body {{
                         margin: 0;
                         background-color: transparent;
-                        transition: background-color 0.3s, color 0.3s;
                     }}
                     pre {{
                         margin: 0;
@@ -116,7 +151,6 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
             <script>
                 function syncTheme() {{
                     const codeBlock = document.querySelector('.hljs');
-                    
                     if (!codeBlock) return;
 
                     const style = window.getComputedStyle(codeBlock);
@@ -129,10 +163,12 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                 }}
 
                 window.addEventListener('load', syncTheme);
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
             </script>
             </body>
             "#,
-            theme,
+            light_theme,
+            dark_theme,
             language,
             escape_text(content)
         },
@@ -192,6 +228,7 @@ fn render_markdown(content: &str) -> String {
 
 /// Renders Markdown `content` as a GitHub-flavored HTML page with highlight.js code blocks.
 fn markdown_page(theme: &str, content: &str) -> Response {
+    let (light_theme, dark_theme) = resolve_theme_pair(theme);
     let rendered = render_markdown(content);
     (
         StatusCode::OK,
@@ -204,20 +241,41 @@ fn markdown_page(theme: &str, content: &str) -> Response {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css">
+                <meta name="color-scheme" content="light dark">
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css" media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)">
+                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/{}.css" media="(prefers-color-scheme: dark)">
                 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
                 <script>hljs.highlightAll();</script>
                 <style>
-                    html {{
-                        background-color: #ffffff;
+                    :root {{
+                        color-scheme: light dark;
+                        --bg-color: #ffffff;
+                        --text-color: #1f2328;
+                        --link-color: #0969da;
+                        --code-bg: #f6f8fa;
+                        --inline-code-bg: rgba(175, 184, 193, 0.2);
+                        --border-color: #d0d7de;
+                        --row-bg: #f6f8fa;
+                        --quote-color: #59636e;
                     }}
-                    body {{
+                    @media (prefers-color-scheme: dark) {{
+                        :root {{
+                            --bg-color: #0d1117;
+                            --text-color: #e6edf3;
+                            --link-color: #58a6ff;
+                            --code-bg: #161b22;
+                            --inline-code-bg: rgba(110, 118, 129, 0.4);
+                            --border-color: #30363d;
+                            --row-bg: #161b22;
+                            --quote-color: #8b949e;
+                        }}
+                    }}
+                    html, body {{
                         margin: 0;
-                        background-color: transparent;
-                        color: #1f2328;
+                        background-color: var(--bg-color);
+                        color: var(--text-color);
                         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
                         line-height: 1.6;
-                        transition: background-color 0.3s, color 0.3s;
                     }}
                     .markdown-body {{
                         max-width: 880px;
@@ -243,7 +301,7 @@ fn markdown_page(theme: &str, content: &str) -> Response {
                     .markdown-body h1,
                     .markdown-body h2 {{
                         padding-bottom: 0.3em;
-                        border-bottom: 1px solid rgba(127, 127, 127, 0.25);
+                        border-bottom: 1px solid var(--border-color);
                     }}
                     .markdown-body p,
                     .markdown-body ul,
@@ -262,7 +320,7 @@ fn markdown_page(theme: &str, content: &str) -> Response {
                         margin-top: 0.25em;
                     }}
                     .markdown-body a {{
-                        color: #0969da;
+                        color: var(--link-color);
                         text-decoration: none;
                     }}
                     .markdown-body a:hover {{
@@ -273,14 +331,14 @@ fn markdown_page(theme: &str, content: &str) -> Response {
                         font-size: 85%;
                         padding: 0.2em 0.4em;
                         border-radius: 6px;
-                        background-color: rgba(127, 127, 127, 0.12);
+                        background-color: var(--inline-code-bg);
                     }}
                     .markdown-body pre {{
                         padding: 16px;
                         overflow-x: auto;
                         border-radius: 6px;
-                        border: 1px solid rgba(127, 127, 127, 0.25);
-                        background-color: rgba(127, 127, 127, 0.06);
+                        border: 1px solid var(--border-color);
+                        background-color: var(--code-bg);
                     }}
                     .markdown-body pre code,
                     .markdown-body pre code.hljs {{
@@ -295,8 +353,8 @@ fn markdown_page(theme: &str, content: &str) -> Response {
                         margin-left: 0;
                         margin-right: 0;
                         padding: 0 1em;
-                        opacity: 0.85;
-                        border-left: 0.25em solid rgba(127, 127, 127, 0.35);
+                        color: var(--quote-color);
+                        border-left: 0.25em solid var(--border-color);
                     }}
                     .markdown-body table {{
                         display: block;
@@ -308,16 +366,16 @@ fn markdown_page(theme: &str, content: &str) -> Response {
                     .markdown-body th,
                     .markdown-body td {{
                         padding: 6px 13px;
-                        border: 1px solid rgba(127, 127, 127, 0.3);
+                        border: 1px solid var(--border-color);
                     }}
                     .markdown-body tr:nth-child(2n) {{
-                        background-color: rgba(127, 127, 127, 0.05);
+                        background-color: var(--row-bg);
                     }}
                     .markdown-body hr {{
                         height: 0.25em;
                         padding: 0;
                         margin: 24px 0;
-                        background-color: rgba(127, 127, 127, 0.25);
+                        background-color: var(--border-color);
                         border: 0;
                     }}
                     .markdown-body img {{
@@ -328,36 +386,10 @@ fn markdown_page(theme: &str, content: &str) -> Response {
             </head>
             <body>
             <main class="markdown-body">{}</main>
-            <script>
-                function syncTheme() {{
-                    let probe = document.querySelector('.hljs');
-                    let temp = false;
-                    if (!probe) {{
-                        probe = document.createElement('code');
-                        probe.className = 'hljs';
-                        probe.style.display = 'none';
-                        document.body.appendChild(probe);
-                        temp = true;
-                    }}
-
-                    const style = window.getComputedStyle(probe);
-                    const bgColor = style.backgroundColor;
-                    const textColor = style.color;
-
-                    if (temp) {{
-                        probe.remove();
-                    }}
-
-                    document.body.style.backgroundColor = bgColor;
-                    document.body.style.color = textColor;
-                    document.documentElement.style.backgroundColor = bgColor;
-                }}
-
-                window.addEventListener('load', syncTheme);
-            </script>
             </body>
             "#,
-            theme,
+            light_theme,
+            dark_theme,
             rendered
         },
     )
