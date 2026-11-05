@@ -49,14 +49,14 @@
   - `.jsonc`, `.jsonl`, `.ndjson`, `.geojson`, `.webmanifest` -> `json`.
   - `.htm`, `.vue`, `.svelte` -> `html`.
 - **Sticky line numbers & selection isolation**:
-  - Server-renders `<a id="L{n}" class="line-num" href="#L{n}" data-line="{n}">{n}</a>` inside a sticky left column (`position: sticky; left: 0; user-select: none`) alongside `<pre><code class="{resolved_language}">`.
+  - Server-renders `<a id="ln-{n}" class="line-num" href="#L{n}" data-line="{n}">{n}</a>` inside a sticky left column (`position: sticky; left: 0; user-select: none`) alongside `<pre><code class="{resolved_language}">`. Using `id="ln-{n}"` (instead of `id="L{n}"`) prevents browser native fragment jumps to `top: 0` on page load and prevents focus-induced `scroll-margin` auto-scrolling when clicking lines near the top of the viewport.
   - Code remains a single contiguous `<pre><code>` block with `overflow-x: visible; width: max-content; min-width: 100%`, preserving multi-line syntax tokens and clean text selection without line numbers.
 - **Line-range deep linking, deselection & context scroll**:
-  - Clicking a line number selects `#L<n>`, updates the URL hash via `history.replaceState`, highlights the line number and full-width `#line-highlight` overlay, and copies the full URL to the clipboard.
+  - Clicking a line number selects `#L<n>`, updates the URL hash via `history.replaceState`, highlights the line number and full-width `#line-highlight` overlay, and copies the full URL to the clipboard without scrolling the viewport.
   - Holding `Shift` while clicking another line number selects a `#L<start>-L<end>` range and copies the range URL.
   - Deselection is supported by clicking the active single line number again, pressing `Escape`, or clicking the `#L... ×` clear button in the top-right toolbar, which strips the hash from the URL and clears the highlight.
-  - Opening a URL with `#L<n>` or `#L<start>-L<end>` (or triggering `hashchange`) scrolls the first selected line into view with ~28% viewport height (`>= 140px`) of upper context (`scroll-margin-top` + `scrollToLine`) so preceding lines remain visible.
-- **Raw content copy**: A floating top-right `Copy` button (`#copy-raw-btn`) copies `<pre><code>.textContent` to the clipboard.
+  - Opening a URL with `#L<n>` or `#L<start>-L<end>` (or triggering `hashchange`) scrolls the first selected line into view via `scrollToLine` with ~28% viewport height (`>= 140px`) of upper context so preceding lines remain visible.
+- **Content copy (selected range or full file)**: A floating top-right `Copy` button (`#copy-raw-btn`) copies only the selected lines (`start..=end`) when a `#L<n>` or `#L<start>-L<end>` selection is active, or the entire `<pre><code>.textContent` when no lines are selected.
 
 ### 5. Delete (`DELETE /{hash}`)
 - Recomputes the expected `secret` from the file's modification timestamp and removes `{hash}.txt` if the request body matches; otherwise returns `403 Forbidden`.

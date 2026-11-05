@@ -143,7 +143,7 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
     for line in 1..=line_count {
         let _ = writeln!(
             line_numbers,
-            r##"<a id="L{line}" class="line-num" href="#L{line}" data-line="{line}">{line}</a>"##
+            r##"<a id="ln-{line}" class="line-num" href="#L{line}" data-line="{line}">{line}</a>"##
         );
     }
 
@@ -179,7 +179,6 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                     html {{
                         background-color: #ffffff;
                         color: #1f2328;
-                        scroll-padding-top: max(140px, 28vh);
                     }}
                     @media (prefers-color-scheme: dark) {{
                         :root {{
@@ -222,7 +221,6 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                         padding: 0 12px;
                         height: var(--line-height);
                         line-height: var(--line-height);
-                        scroll-margin-top: max(140px, 28vh);
                         color: inherit;
                         opacity: 0.45;
                         text-decoration: none;
@@ -402,16 +400,20 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                     showToast('Cleared line selection');
                 }}
 
+                let userInteracted = false;
+
                 function applyLineHighlight(shouldScroll) {{
                     const activeNums = document.querySelectorAll('.line-num.active');
                     activeNums.forEach((el) => el.classList.remove('active'));
 
                     const overlay = document.getElementById('line-highlight');
                     const clearBtn = document.getElementById('clear-line-btn');
+                    const copyBtn = document.getElementById('copy-raw-btn');
                     const range = parseLineRange(window.location.hash);
                     if (!range) {{
                         if (overlay) overlay.style.display = 'none';
                         if (clearBtn) clearBtn.hidden = true;
+                        if (copyBtn) copyBtn.title = 'Copy raw file content';
                         return;
                     }}
 
@@ -419,7 +421,7 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                     if (anchorLine === null) anchorLine = start;
 
                     for (let i = start; i <= end; i++) {{
-                        const el = document.getElementById('L' + i);
+                        const el = document.getElementById('ln-' + i);
                         if (el) el.classList.add('active');
                     }}
 
@@ -429,10 +431,13 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                         overlay.style.display = 'block';
                     }}
 
+                    const label = start === end ? '#L' + start : '#L' + start + '-L' + end;
                     if (clearBtn) {{
-                        const label = start === end ? '#L' + start : '#L' + start + '-L' + end;
                         clearBtn.textContent = label + ' \u00d7';
                         clearBtn.hidden = false;
+                    }}
+                    if (copyBtn) {{
+                        copyBtn.title = 'Copy selected lines (' + label + ')';
                     }}
 
                     if (shouldScroll) {{
@@ -444,6 +449,7 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                     const link = event.target.closest('.line-num');
                     if (!link || event.metaKey || event.ctrlKey || event.altKey || event.button !== 0) return;
                     event.preventDefault();
+                    userInteracted = true;
 
                     const clickedLine = parseInt(link.dataset.line, 10);
                     if (!clickedLine) return;
@@ -477,11 +483,13 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                 }});
 
                 document.getElementById('clear-line-btn').addEventListener('click', () => {{
+                    userInteracted = true;
                     clearLineSelection();
                 }});
 
                 document.addEventListener('keydown', (event) => {{
                     if (event.key === 'Escape' && parseLineRange(window.location.hash)) {{
+                        userInteracted = true;
                         clearLineSelection();
                     }}
                 }});
@@ -490,9 +498,20 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                     const codeEl = document.querySelector('pre code');
                     if (!codeEl) return;
                     const btn = document.getElementById('copy-raw-btn');
-                    copyToClipboard(codeEl.textContent || '').then(() => {{
+                    const rawText = codeEl.textContent || '';
+                    const range = parseLineRange(window.location.hash);
+                    let textToCopy = rawText;
+                    let toastMsg = 'Copied raw content';
+                    if (range) {{
+                        const [start, end] = range;
+                        const lines = rawText.split('\n');
+                        textToCopy = lines.slice(start - 1, end).join('\n');
+                        const label = start === end ? '#L' + start : '#L' + start + '-L' + end;
+                        toastMsg = 'Copied ' + label + ' content';
+                    }}
+                    copyToClipboard(textToCopy).then(() => {{
                         btn.textContent = 'Copied!';
-                        showToast('Copied raw content');
+                        showToast(toastMsg);
                         setTimeout(() => {{ btn.textContent = 'Copy'; }}, 1500);
                     }});
                 }});
@@ -500,8 +519,7 @@ fn highlighted_page(theme: &str, language: &str, content: &str) -> Response {
                 window.addEventListener('DOMContentLoaded', () => applyLineHighlight(true));
                 window.addEventListener('load', () => {{
                     syncTheme();
-                    applyLineHighlight(true);
-                    requestAnimationFrame(() => applyLineHighlight(true));
+                    applyLineHighlight(!userInteracted);
                 }});
                 window.addEventListener('hashchange', () => applyLineHighlight(true));
                 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);

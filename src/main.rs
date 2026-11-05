@@ -418,18 +418,20 @@ mod tests {
         // Sticky line numbers for all 5 lines with clickable #L<n> links
         for line in 1..=5 {
             assert!(html.contains(&format!(
-                r##"<a id="L{line}" class="line-num" href="#L{line}" data-line="{line}">{line}</a>"##
+                r##"<a id="ln-{line}" class="line-num" href="#L{line}" data-line="{line}">{line}</a>"##
             )));
         }
-        assert!(!html.contains(r#"id="L6""#));
-        // Sticky gutter, unselectable line numbers, copy raw button, and #L10-L20 range support
+        assert!(!html.contains(r#"id="ln-6""#));
+        // Sticky gutter, unselectable line numbers, copy selected/raw button, and #L10-L20 range support
         assert!(html.contains("position: sticky;"));
         assert!(html.contains("user-select: none;"));
         assert!(html.contains(r#"id="copy-raw-btn""#));
         assert!(html.contains(r#"id="clear-line-btn""#));
         assert!(html.contains("function clearLineSelection()"));
         assert!(html.contains("function scrollToLine(line)"));
-        assert!(html.contains("scroll-margin-top: max(140px, 28vh);"));
+        assert!(html.contains("lines.slice(start - 1, end).join('\\n')"));
+        assert!(!html.contains("scroll-margin-top"));
+        assert!(!html.contains("scroll-padding-top"));
         assert!(html.contains("const TOTAL_LINES = 5;"));
     }
 
