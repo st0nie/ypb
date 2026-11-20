@@ -94,7 +94,7 @@
         }
 
         .container {
-            max-width: 820px;
+            max-width: 1080px;
             margin: 0 auto;
             padding: 28px 20px 56px;
         }
@@ -249,8 +249,8 @@
         /* Textarea */
         .paste-area {
             width: 100%;
-            min-height: 240px;
-            max-height: 60vh;
+            min-height: clamp(380px, 58vh, 720px);
+            max-height: 82vh;
             resize: vertical;
             padding: 12px 14px;
             border: 1px solid var(--border-color);
@@ -309,7 +309,12 @@
         .dropzone {
             border: 2px dashed var(--border-color);
             border-radius: 8px;
-            padding: 40px 20px;
+            min-height: clamp(220px, 32vh, 360px);
+            padding: 40px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             text-align: center;
             cursor: pointer;
             background-color: var(--surface-color);
@@ -818,7 +823,7 @@
                 display: none;
             }
             .paste-area {
-                min-height: 200px;
+                min-height: 280px;
             }
             .url-label {
                 width: 100%;
