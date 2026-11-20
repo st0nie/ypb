@@ -4,7 +4,7 @@ YPB (Yet another PasteBin) is a Rust-based temporary Pastebin service and URL sh
 
 ## Features
 
-- **File Upload**: Upload files via HTTP interface.
+- **File Upload**: Upload text, code, URLs, or binary files via the web UI or HTTP interface.
 - **File Cleanup**: Periodically check and delete expired files.
 
 ## Documentation
@@ -19,7 +19,7 @@ The examples below use the base URL of the server that serves this page.
 ### Index
 - **Method**: `GET`
 - **Path**: `/`
-- **Description**: This document. Browsers (clients sending `Accept: text/html`) get a rendered Markdown page; other clients get plain text.
+- **Description**: Browsers (clients sending `Accept: text/html`) get an interactive web upload frontend; other clients (such as `curl`) get this document as plain text. This usage guide is also available at `/README.md`.
 
 ### Upload File
 - **Method**: `PUT`

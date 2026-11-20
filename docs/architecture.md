@@ -8,22 +8,23 @@
 ## Module Structure
 
 - `src/main.rs`:
-  - `app(Arc<AppState>) -> Router`: Builds the Axum router with `TraceLayer`, `TimeoutLayer` (10s), and `DefaultBodyLimit` (`--limit-size`).
+  - `app(Arc<AppState>) -> Router`: Builds the Axum router with `TraceLayer`, `TimeoutLayer` (60s), and `DefaultBodyLimit` (`--limit-size`).
   - `main()`: Initializes `tracing_subscriber`, parses CLI arguments (`Args`), ensures the storage directory exists, spawns the background cleaner task, and runs the HTTP server with graceful shutdown (`SIGINT` / `SIGTERM`).
 - `src/util.rs`: Shared `AppState` holding `Arc<Args>`.
 - `src/util/args.rs`: CLI flags (`--port`, `--file-path`, `--clean-period`, `--limit-size`, `--syntax-theme`, `--base-url`) and validation/normalization for `--base-url`.
 - `src/util/base_url.rs`: `BaseUrl` Axum request extractor. Uses `--base-url` when configured; otherwise derives `<scheme>://<host>` from `X-Forwarded-Proto` (defaulting to `http`) and the `Host` header.
 - `src/util/cleaner.rs`: Background Tokio interval task (`cleaner_task`) that removes expired files from the storage directory based on modification timestamp and file size.
-- `src/util/handler.rs`: HTTP route handlers and HTML rendering (`index_handler`, `get_handler`, `put_handler`, `delete_handler`, `markdown_page`, `highlighted_page`).
+- `src/util/handler.rs`: HTTP route handlers and HTML rendering (`index_handler`, `readme_handler`, `doc_handler`, `get_handler`, `put_handler`, `delete_handler`, `markdown_page`, `highlighted_page`).
+- `src/assets/index.html`: Embedded zero-build-step web upload frontend (Paste Text/Code/URL & Upload File tabs, drag-and-drop, global clipboard file/image paste, extension selector, client-side size limit check, XHR upload progress/cancel, result copy/delete actions, and `localStorage` recent upload history).
 
 ## Request Flows
 
 ### 1. Index & Documentation Pages (`GET /`, `GET /README.md`, `GET /docs/{doc}`)
-- `index_handler` embeds `README.md` at compile time (`include_str!("../../README.md")`) and replaces the placeholder `http://localhost:3000` origin with the resolved `BaseUrl`.
-- `doc_handler` serves embedded project documentation (`docs/install.md`, `docs/architecture.md`) so links in `README.md` work both on GitHub and on the running `ypb` web instance (including inside minimal Docker images).
-- Content negotiation via `Accept` (`Vary: accept`):
-  - Clients accepting `text/html` (browsers) receive a GitHub-flavored Markdown HTML page rendered by `markdown_page`.
-  - Terminal clients (such as `curl`) receive raw `text/plain; charset=utf-8`.
+- `index_handler` (`GET /`) negotiates on `Accept` (`Vary: accept`):
+  - Clients accepting `text/html` (browsers) receive the embedded interactive web upload frontend (`src/assets/index.html`) with `--limit-size` and `--clean-period` injected, plus navigation links to `/README.md`, `/docs/install.md`, and `/docs/architecture.md`. The frontend uploads directly via `PUT /` and deletes via `DELETE /{hash}` without any extra API endpoints.
+  - Terminal clients (such as `curl`) receive plain-text `README.md` (`text/plain; charset=utf-8`) with the placeholder `http://localhost:3000` origin replaced by `BaseUrl`.
+- `readme_handler` (`GET /README.md`) serves `README.md` (with `BaseUrl` substitution) as a GitHub-flavored Markdown HTML page for browsers (`markdown_page`) and raw plain text for non-HTML clients.
+- `doc_handler` (`GET /docs/{doc}`) serves embedded project documentation (`docs/install.md`, `docs/architecture.md`) with the same `Accept` negotiation so links work both on GitHub and on the running `ypb` web instance (including inside minimal Docker images).
 
 ### 2. Upload (`PUT /`)
 - Computes a 4-character URL-safe Base64 prefix of the `CRC-32/ISO-HDLC` checksum of the request body.
@@ -59,4 +60,4 @@
 - **Content copy (selected range or full file)**: A floating top-right `Copy` button (`#copy-raw-btn`) copies only the selected lines (`start..=end`) when a `#L<n>` or `#L<start>-L<end>` selection is active, or the entire `<pre><code>.textContent` when no lines are selected.
 
 ### 5. Delete (`DELETE /{hash}`)
-- Recomputes the expected `secret` from the file's modification timestamp and removes `{hash}.txt` if the request body matches; otherwise returns `403 Forbidden`.
+- Recomputes the expected `secret` from the file's modification timestamp and removes `{hash}.txt` if the request body matches; returns `404 Not Found` if missing or `403 Forbidden` on secret mismatch.

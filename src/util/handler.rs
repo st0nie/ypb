@@ -764,21 +764,47 @@ fn is_markdown_ext(ext: &str) -> bool {
     )
 }
 
-/// The README doubles as the index page. Its API examples use this origin,
-/// which is replaced with the public base URL when serving the page.
+/// The README doubles as the plain-text index page and `/README.md` doc page.
+/// Its API examples use this origin, which is replaced with the public base URL.
 const INDEX_PAGE: &str = include_str!("../../README.md");
+const UPLOAD_PAGE: &str = include_str!("../assets/index.html");
 const INSTALL_DOC: &str = include_str!("../../docs/install.md");
 const ARCHITECTURE_DOC: &str = include_str!("../../docs/architecture.md");
 const INDEX_EXAMPLE_ORIGIN: &str = "http://localhost:3000";
 
-fn negotiate_markdown_response(headers: &HeaderMap, theme: &str, content: String) -> Response {
-    let accepts_html = headers
+fn accepts_html(headers: &HeaderMap) -> bool {
+    headers
         .get_all(header::ACCEPT)
         .iter()
         .filter_map(|value| value.to_str().ok())
-        .any(|value| value.contains(mime::TEXT_HTML.as_ref()));
+        .any(|value| value.contains(mime::TEXT_HTML.as_ref()))
+}
 
-    let response = if accepts_html {
+fn upload_page(limit_size: usize, clean_period: u64) -> Response {
+    let html = UPLOAD_PAGE
+        .replace("__YPB_LIMIT_SIZE__", &limit_size.to_string())
+        .replace("__YPB_CLEAN_PERIOD__", &clean_period.to_string());
+
+    (
+        StatusCode::OK,
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
+        )],
+        html,
+    )
+        .into_response()
+}
+
+fn readme_content(base_url: Result<BaseUrl, TypedHeaderRejection>) -> String {
+    match base_url {
+        Ok(BaseUrl(base_url)) => INDEX_PAGE.replace(INDEX_EXAMPLE_ORIGIN, &base_url),
+        Err(_) => INDEX_PAGE.to_string(),
+    }
+}
+
+fn negotiate_markdown_response(headers: &HeaderMap, theme: &str, content: String) -> Response {
+    let response = if accepts_html(headers) {
         markdown_page(theme, &content)
     } else {
         content.into_response()
@@ -787,18 +813,30 @@ fn negotiate_markdown_response(headers: &HeaderMap, theme: &str, content: String
     ([(header::VARY, header::ACCEPT.as_str())], response).into_response()
 }
 
-/// Serves the index page: rendered Markdown HTML for clients that accept
-/// HTML (browsers), plain text otherwise (e.g. curl).
+/// Serves the index page: interactive upload web UI for clients that accept
+/// HTML (browsers), plain-text README usage guide otherwise (e.g. curl).
 pub async fn index_handler(
     base_url: Result<BaseUrl, TypedHeaderRejection>,
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> Response {
-    let content = match base_url {
-        Ok(BaseUrl(base_url)) => INDEX_PAGE.replace(INDEX_EXAMPLE_ORIGIN, &base_url),
-        Err(_) => INDEX_PAGE.to_string(),
+    let response = if accepts_html(&headers) {
+        upload_page(state.args.limit_size, state.args.clean_period)
+    } else {
+        readme_content(base_url).into_response()
     };
 
+    ([(header::VARY, header::ACCEPT.as_str())], response).into_response()
+}
+
+/// Serves `README.md` with base URL substitution: rendered Markdown HTML for
+/// browsers, plain text otherwise.
+pub async fn readme_handler(
+    base_url: Result<BaseUrl, TypedHeaderRejection>,
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+) -> Response {
+    let content = readme_content(base_url);
     negotiate_markdown_response(&headers, &state.args.syntax_theme, content)
 }
 
@@ -912,19 +950,19 @@ pub async fn delete_handler(
     let dir = &state.args.file_path;
     let file_path = FilePath::new(dir).join(file_name);
 
-    let file = TokioFile::open(&file_path).await?;
+    let file = match TokioFile::open(&file_path).await {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Err(AppError::NotFound),
+        Err(err) => return Err(AppError::IoError(err)),
+    };
 
     let timestamp = file_to_timestamp(&file).await?;
     let file_secret = HASHER.checksum(timestamp.as_bytes()).to_string();
 
-    if file_path.exists() {
-        if secret == file_secret {
-            fs::remove_file(file_path).await?;
-            Ok(format!("File {} deleted successfully", file_hash))
-        } else {
-            Err(AppError::Forbidden)
-        }
+    if secret == file_secret {
+        fs::remove_file(file_path).await?;
+        Ok(format!("File {} deleted successfully", file_hash))
     } else {
-        Err(AppError::NotFound)
+        Err(AppError::Forbidden)
     }
 }

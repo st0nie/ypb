@@ -15,7 +15,9 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod util;
-use util::handler::{delete_handler, doc_handler, get_handler, index_handler, put_handler};
+use util::handler::{
+    delete_handler, doc_handler, get_handler, index_handler, put_handler, readme_handler,
+};
 use util::{AppState, Args};
 
 const DEFAULT_LOG_LEVEL: LevelFilter = if cfg!(debug_assertions) {
@@ -28,14 +30,14 @@ fn app(app_state: Arc<AppState>) -> Router {
     let limit_size = app_state.args.limit_size;
     Router::new()
         .route("/", get(index_handler).put(put_handler))
-        .route("/README.md", get(index_handler))
+        .route("/README.md", get(readme_handler))
         .route("/docs/{doc}", get(doc_handler))
         .route("/{*hash}", get(get_handler).delete(delete_handler))
         .layer((
             TraceLayer::new_for_http(),
             // Graceful shutdown will wait for outstanding requests to complete. Add a timeout so
             // requests don't hang forever.
-            TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, Duration::from_secs(10)),
+            TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, Duration::from_secs(60)),
             DefaultBodyLimit::max(limit_size),
         ))
         .with_state(app_state)
@@ -179,11 +181,43 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn index_is_highlighted_html_for_browsers() {
-        let app = TestApp::new("index-html", &["--base-url", "https://pb.example.com/"]);
+    async fn index_is_upload_ui_for_browsers() {
+        let app = TestApp::new(
+            "index-upload-ui",
+            &["--limit-size", "2097152", "--clean-period", "7200"],
+        );
         let response = app
             .send(
                 Request::get("/")
+                    .header(header::HOST, "pb.example.com")
+                    .header(header::ACCEPT, BROWSER_ACCEPT)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(content_type(&response), "text/html; charset=utf-8");
+        assert_eq!(response.headers()[header::VARY], "accept");
+        let body = body_text(response).await;
+        assert!(body.contains("<title>YPB — Pastebin &amp; File Upload</title>"));
+        assert!(body.contains("limitSize: 2097152"));
+        assert!(body.contains("cleanPeriod: 7200"));
+        assert!(!body.contains("__YPB_LIMIT_SIZE__"));
+        assert!(!body.contains("__YPB_CLEAN_PERIOD__"));
+        assert!(body.contains(r#"id="paste-input""#));
+        assert!(body.contains(r#"id="file-input""#));
+        assert!(body.contains(r#"href="README.md""#));
+        assert!(body.contains(r#"href="docs/install.md""#));
+        assert!(body.contains(r#"href="docs/architecture.md""#));
+    }
+
+    #[tokio::test]
+    async fn readme_is_highlighted_html_for_browsers_and_plain_text_for_cli() {
+        let app = TestApp::new("readme-html", &["--base-url", "https://pb.example.com/"]);
+        let response = app
+            .send(
+                Request::get("/README.md")
                     .header(header::HOST, "internal:3000")
                     .header(header::ACCEPT, BROWSER_ACCEPT)
                     .body(Body::empty())
@@ -202,6 +236,19 @@ mod tests {
         assert!(body.contains("$ curl https://pb.example.com/K8mw"));
         assert!(!body.contains("localhost:3000"));
         assert!(!body.contains("internal:3000"));
+
+        let plain = app
+            .send(
+                Request::get("/README.md")
+                    .header(header::HOST, "internal:3000")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(plain.status(), StatusCode::OK);
+        assert_eq!(content_type(&plain), "text/plain; charset=utf-8");
+        assert_eq!(plain.headers()[header::VARY], "accept");
+        assert!(body_text(plain).await.starts_with("# YPB"));
     }
 
     #[tokio::test]
@@ -302,6 +349,15 @@ mod tests {
             .send(
                 Request::get(format!("/{short}"))
                     .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let response = app
+            .send(
+                Request::delete(format!("/{short}"))
+                    .body(Body::from("0"))
                     .unwrap(),
             )
             .await;
