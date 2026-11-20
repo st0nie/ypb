@@ -587,8 +587,55 @@ fn render_markdown(content: &str) -> String {
     rendered
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DocNavPage {
+    Readme,
+    Install,
+    Architecture,
+}
+
+fn render_doc_header(page: DocNavPage) -> String {
+    let (home_href, readme_href, install_href, arch_href) = match page {
+        DocNavPage::Readme => ("./", "README.md", "docs/install.md", "docs/architecture.md"),
+        DocNavPage::Install | DocNavPage::Architecture => {
+            ("../", "../README.md", "install.md", "architecture.md")
+        }
+    };
+    let active = |target: DocNavPage| {
+        if page == target {
+            r#" aria-current="page""#
+        } else {
+            ""
+        }
+    };
+
+    format!(
+        concat!(
+            r#"<header class="site-header">"#,
+            r#"<a class="site-brand" href="{home}">YPB</a>"#,
+            r#"<nav class="site-nav" aria-label="Navigation">"#,
+            r#"<a href="{home}">Upload</a>"#,
+            r#"<a href="{readme}"{readme_active}>CLI / Docs</a>"#,
+            r#"<a href="{install}"{install_active}>Install</a>"#,
+            r#"<a href="{arch}"{arch_active}>Architecture</a>"#,
+            r#"</nav></header>"#
+        ),
+        home = home_href,
+        readme = readme_href,
+        readme_active = active(DocNavPage::Readme),
+        install = install_href,
+        install_active = active(DocNavPage::Install),
+        arch = arch_href,
+        arch_active = active(DocNavPage::Architecture),
+    )
+}
+
 /// Renders Markdown `content` as a GitHub-flavored HTML page with highlight.js code blocks.
 fn markdown_page(theme: &str, content: &str) -> Response {
+    markdown_page_with_header(theme, content, "")
+}
+
+fn markdown_page_with_header(theme: &str, content: &str, header_html: &str) -> Response {
     let (light_theme, dark_theme) = resolve_theme_pair(theme);
     let rendered = render_markdown(content);
     (
@@ -637,6 +684,56 @@ fn markdown_page(theme: &str, content: &str) -> Response {
                         color: var(--text-color);
                         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
                         line-height: 1.6;
+                    }}
+                    .site-header {{
+                        max-width: 880px;
+                        margin: 0 auto;
+                        padding: 18px 24px 14px;
+                        box-sizing: border-box;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 12px;
+                        flex-wrap: wrap;
+                        border-bottom: 1px solid var(--border-color);
+                    }}
+                    .site-brand {{
+                        font-size: 20px;
+                        font-weight: 700;
+                        letter-spacing: -0.02em;
+                        color: var(--text-color);
+                        text-decoration: none;
+                    }}
+                    .site-brand:hover {{
+                        text-decoration: none;
+                        color: var(--link-color);
+                    }}
+                    .site-nav {{
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        flex-wrap: wrap;
+                    }}
+                    .site-nav a {{
+                        display: inline-flex;
+                        align-items: center;
+                        padding: 5px 10px;
+                        border-radius: 6px;
+                        font-size: 13px;
+                        font-weight: 500;
+                        color: var(--text-color);
+                        text-decoration: none;
+                        border: 1px solid transparent;
+                        transition: background-color 0.15s ease, border-color 0.15s ease;
+                    }}
+                    .site-nav a:hover,
+                    .site-nav a[aria-current="page"] {{
+                        text-decoration: none;
+                        background-color: var(--code-bg);
+                        border-color: var(--border-color);
+                    }}
+                    .site-nav a[aria-current="page"] {{
+                        font-weight: 600;
                     }}
                     .markdown-body {{
                         max-width: 880px;
@@ -746,11 +843,12 @@ fn markdown_page(theme: &str, content: &str) -> Response {
                 </style>
             </head>
             <body>
-            <main class="markdown-body">{}</main>
+            {}<main class="markdown-body">{}</main>
             </body>
             "#,
             light_theme,
             dark_theme,
+            header_html,
             rendered
         },
     )
@@ -803,9 +901,15 @@ fn readme_content(base_url: Result<BaseUrl, TypedHeaderRejection>) -> String {
     }
 }
 
-fn negotiate_markdown_response(headers: &HeaderMap, theme: &str, content: String) -> Response {
+fn negotiate_markdown_response(
+    headers: &HeaderMap,
+    theme: &str,
+    content: String,
+    nav_page: DocNavPage,
+) -> Response {
     let response = if accepts_html(headers) {
-        markdown_page(theme, &content)
+        let header_html = render_doc_header(nav_page);
+        markdown_page_with_header(theme, &content, &header_html)
     } else {
         content.into_response()
     };
@@ -837,7 +941,7 @@ pub async fn readme_handler(
     State(state): State<Arc<AppState>>,
 ) -> Response {
     let content = readme_content(base_url);
-    negotiate_markdown_response(&headers, &state.args.syntax_theme, content)
+    negotiate_markdown_response(&headers, &state.args.syntax_theme, content, DocNavPage::Readme)
 }
 
 /// Serves embedded project documentation under `/docs/{doc}`.
@@ -846,9 +950,9 @@ pub async fn doc_handler(
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, AppError> {
-    let content = match doc_name.as_str() {
-        "install.md" => INSTALL_DOC,
-        "architecture.md" => ARCHITECTURE_DOC,
+    let (content, nav_page) = match doc_name.as_str() {
+        "install.md" => (INSTALL_DOC, DocNavPage::Install),
+        "architecture.md" => (ARCHITECTURE_DOC, DocNavPage::Architecture),
         _ => return Err(AppError::NotFound),
     };
 
@@ -856,6 +960,7 @@ pub async fn doc_handler(
         &headers,
         &state.args.syntax_theme,
         content.to_string(),
+        nav_page,
     ))
 }
 

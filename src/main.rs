@@ -230,6 +230,9 @@ mod tests {
         assert_eq!(response.headers()[header::VARY], "accept");
         let body = body_text(response).await;
         assert!(body.contains(r#"<main class="markdown-body"><h1>YPB</h1>"#));
+        assert!(body.contains(r#"<header class="site-header">"#));
+        assert!(body.contains(r#"<a href="./">Upload</a>"#));
+        assert!(body.contains(r#"<a href="README.md" aria-current="page">CLI / Docs</a>"#));
         assert!(body.contains("styles/vs.css"));
         assert!(body.contains("styles/vs2015.css"));
         assert!(!body.contains("syncTheme"));
@@ -505,11 +508,13 @@ mod tests {
             .await;
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(content_type(&response), "text/html; charset=utf-8");
-        assert!(
-            body_text(response)
-                .await
-                .contains("<h1>Installation &amp; Configuration</h1>")
-        );
+        let install_html = body_text(response).await;
+        assert!(install_html.contains("<h1>Installation &amp; Configuration</h1>"));
+        assert!(install_html.contains(r#"<header class="site-header">"#));
+        assert!(install_html.contains(r#"<a href="../">Upload</a>"#));
+        assert!(install_html.contains(r#"<a href="../README.md">CLI / Docs</a>"#));
+        assert!(install_html.contains(r#"<a href="install.md" aria-current="page">Install</a>"#));
+        assert!(install_html.contains(r#"<a href="architecture.md">Architecture</a>"#));
 
         let response = app
             .send(
